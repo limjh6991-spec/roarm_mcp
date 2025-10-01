@@ -1,0 +1,27 @@
+# MCP 서버 설정
+server:
+  host: "0.0.0.0"
+  port: 8000
+  debug: true
+  reload: false
+  log_level: "info"
+
+# API 설정
+api:
+  prefix: "/api/v1"
+  enable_docs: true
+  allow_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8000"
+
+# 보안 설정
+security:
+  api_key_required: false
+  api_key_name: "x-api-key"
+
+# WebSocket 설정
+websocket:
+  enable: true
+  path: "/ws"
+  ping_interval: 30
+  ping_timeout: 10

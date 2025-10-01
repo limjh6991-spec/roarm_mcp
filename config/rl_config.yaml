@@ -1,0 +1,64 @@
+# 강화학습 설정
+training:
+  # 일반 설정
+  seed: 42
+  total_timesteps: 1000000
+  eval_freq: 10000
+  n_eval_episodes: 10
+  
+  # 학습 환경 설정
+  env:
+    id: "RoArmReach-v0"
+    n_envs: 8  # 병렬 환경 수
+    frame_skip: 1
+    max_episode_steps: 1000
+    reward_type: "sparse"  # dense 또는 sparse
+    
+  # PPO 알고리즘 설정
+  ppo:
+    n_steps: 2048
+    batch_size: 64
+    n_epochs: 10
+    gamma: 0.99
+    gae_lambda: 0.95
+    clip_range: 0.2
+    ent_coef: 0.0
+    vf_coef: 0.5
+    max_grad_norm: 0.5
+    learning_rate: 3.0e-4
+    
+  # DQN 알고리즘 설정
+  dqn:
+    buffer_size: 100000
+    learning_starts: 1000
+    batch_size: 32
+    tau: 1.0
+    gamma: 0.99
+    train_freq: 4
+    gradient_steps: 1
+    target_update_interval: 1000
+    learning_rate: 1.0e-4
+    
+  # SAC 알고리즘 설정
+  sac:
+    buffer_size: 300000
+    learning_starts: 100
+    batch_size: 256
+    tau: 0.005
+    gamma: 0.99
+    train_freq: 1
+    gradient_steps: 1
+    learning_rate: 3.0e-4
+    ent_coef: "auto"
+    
+  # 모델 체크포인트 설정
+  checkpoint:
+    save_freq: 50000
+    save_path: "models/checkpoints"
+    save_replay_buffer: true
+    
+  # 신경망 아키텍처
+  network:
+    policy_type: "MlpPolicy"
+    net_arch: [256, 256]
+    activation_fn: "relu"
