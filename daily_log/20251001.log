@@ -1,0 +1,70 @@
+# RoArm MCP 작업 로그
+# 날짜: 2025년 10월 1일
+# 작성자: RoArm M3
+
+## 환경 분석 및 설정
+- Ubuntu 24.04.3 LTS에서 작업
+- AMD Ryzen 7 9800X3D 프로세서
+- NVIDIA GeForce RTX 5090 GPU
+- Python 3.12.3 환경
+
+## 프로젝트 구조 생성
+- MCP(Model Context Protocol) 서버 기본 구조 설정
+- 로봇팔 인터페이스 추상 클래스 구현
+- 시뮬레이션 및 하드웨어 인터페이스 설계
+- 강화학습 에이전트 구현 (PPO 기반)
+
+## 설정 파일
+- MCP 서버 설정: mcp_config.yaml
+- 로봇 구성 설정: robot_config.yaml
+- 강화학습 설정: rl_config.yaml
+
+## 주요 구성요소
+1. MCP 서버
+   - FastAPI 기반 REST API
+   - WebSocket 통신 지원
+   - 로봇 제어 및 학습 API 엔드포인트
+
+2. 로봇팔 시뮬레이션
+   - Gymnasium 기반 환경
+   - PyBullet 물리 시뮬레이션
+   - 시각화 도구
+
+3. 하드웨어 인터페이스
+   - 시리얼 통신 구현
+   - 로봇팔 명령 및 상태 조회
+
+4. 강화학습 프레임워크
+   - Stable-Baselines3 통합
+   - PPO 알고리즘 구현
+   - 모델 평가 및 배포 기능
+
+## 프로젝트 정리 및 Git 설정
+- 프로젝트 디렉토리 구조 정리
+  - mcp_server, robot_arm, rl_training 디렉토리를 backup으로 이동
+  - 주요 모듈을 mcp, isaac_sim, robot, envs 디렉토리로 재구성
+- Git 저장소 초기화 및 설정
+  - .gitignore 파일 구성
+  - 첫 번째 커밋 완료
+- GitHub 저장소 설정 준비
+  - 저장소 생성 방법 안내
+  - remote 연결 준비
+
+## 코드 리팩토링
+- MCP 서버 코드 개선
+- 로봇 제어 인터페이스 통합
+- Isaac Sim 연동 코드 정리
+- 강화학습 환경 클래스 구조화
+
+## 다음 작업 계획 (2025년 10월 2일)
+- GitHub 저장소 생성 및 연결 완료
+- Isaac Sim 통합 테스트 실행
+- 로봇팔 제어 모듈 확장
+  - UR10 로봇 모델 추가 구현
+  - Franka 로봇 모델 개선
+- 강화학습 알고리즘 통합 테스트
+  - 기본 PPO 알고리즘 테스트
+  - 사용자 정의 정책 네트워크 구현
+- API 문서화
+  - MCP 인터페이스 문서 작성
+  - 환경 설정 가이드 업데이트
