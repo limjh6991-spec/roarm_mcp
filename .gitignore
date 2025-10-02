@@ -61,3 +61,8 @@ models/checkpoints/
 .env
 .DS_Store
 Thumbs.db
+
+# Isaac Sim generated files
+tests/*.usd
+tests/*.usda
+tests/*.usdc
