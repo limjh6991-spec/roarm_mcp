@@ -46,32 +46,53 @@ git branch  # 현재 브랜치 확인 (main)
 - **Isaac Sim**: 독립적인 환경에서 실행
 - **상태 확인**: `ps aux | grep python` 로 프로세스 생존 여부 확인
 
-**올바른 실행 예시:**
+**올바른 실행 예시 (2025-10-02 업데이트):**
 ```bash
-# ✅ MCP 서버 백그라운드 실행
+# ✅ Isaac Sim 5.0 MCP 서버 실행 (필수: Isaac Sim 환경에서 실행)
+cd /home/roarm_m3/isaac_sim
+./python.sh /home/roarm_m3/dev_roarm/roarm_mcp/examples/run_isaac_sim_server.py --robot-type ur10 --headless
+
+# ✅ 백그라운드 실행 (서버 운영용)
+cd /home/roarm_m3/isaac_sim
+nohup ./python.sh /home/roarm_m3/dev_roarm/roarm_mcp/examples/run_isaac_sim_server.py --robot-type ur10 --headless > /home/roarm_m3/dev_roarm/roarm_mcp/logs/isaac_sim_mcp.log 2>&1 &
+
+# ✅ 클라이언트 테스트 (별도 터미널)
 cd /home/roarm_m3/dev_roarm/roarm_mcp
-nohup python -m examples.run_server --env-type joint_position --robot-type ur10 > logs/mcp_server.log 2>&1 &
+python examples/isaac_sim_client.py --server-url ws://localhost:8765 --robot-type ur10
 
-# ✅ 클라이언트 테스트 (서버와 분리)
-python -m examples.sample_client --server-url ws://localhost:8765
-
-# ✅ Isaac Sim 환경에서 시뮬레이션 실행
-cd ~/isaac_sim && python /home/roarm_m3/dev_roarm/roarm_mcp/examples/simple_control.py
+# ✅ 완성된 Isaac Sim PhysX Tensors 솔루션 단독 실행
+cd /home/roarm_m3/isaac_sim
+./python.sh /home/roarm_m3/dev_roarm/roarm_mcp/isaac_sim_integration/solutions/isaac_sim_physx_tensors_solution.py
 
 # ❌ 잘못된 방법들
-python examples/run_server.py  # 모듈 경로 없이 실행
-# 서버 실행 터미널에서 클라이언트 실행 (서버 종료됨)
+python examples/run_isaac_sim_server.py  # Isaac Sim 환경 없이 실행 (실패)
+cd /home/roarm_m3/dev_roarm/roarm_mcp && python examples/run_isaac_sim_server.py  # 잘못된 디렉토리
+# Isaac Sim python.sh 없이 일반 Python으로 실행 (모듈 오류)
 ```
 
-**🔄 환경 복구 프로토콜**:
+**🔄 환경 복구 프로토콜 (Isaac Sim 5.0 업데이트):**
 ```bash
-# Isaac Sim 환경 확인
-echo "Isaac Sim 설치: $(ls ~/isaac_sim 2>/dev/null && echo 'OK' || echo 'MISSING')"
-# 의존성 확인
-pip list | grep gymnasium
-pip list | grep websockets
-# 프로젝트 구조 확인
-ls -la mcp/ isaac_sim/ robot/ envs/
+# 1) Isaac Sim 5.0 환경 확인
+echo "Isaac Sim 설치: $(ls /home/roarm_m3/isaac_sim 2>/dev/null && echo 'OK' || echo 'MISSING')"
+ls /home/roarm_m3/isaac_sim/python.sh  # Isaac Sim Python 실행파일 확인
+
+# 2) Isaac Sim PhysX Tensors 솔루션 확인
+ls -la /home/roarm_m3/dev_roarm/roarm_mcp/isaac_sim_integration/solutions/isaac_sim_physx_tensors_solution.py
+
+# 3) 프로젝트 구조 확인 (2025-10-02 구조)
+cd /home/roarm_m3/dev_roarm/roarm_mcp
+ls -la mcp/ isaac_sim_integration/ examples/ logs/
+
+# 4) MCP 서버 프로세스 확인
+ps aux | grep isaac_sim_server
+ps aux | grep python | grep mcp
+
+# 5) 포트 사용 확인
+netstat -an | grep 8765
+lsof -i :8765
+
+# 6) 로그 확인
+tail -f /home/roarm_m3/dev_roarm/roarm_mcp/logs/isaac_sim_mcp.log
 ```
 
 ### **2. 필수 문서 읽기 (작업 전 매번)**
@@ -202,23 +223,59 @@ ls -la mcp/ isaac_sim/ robot/ envs/
 
 ## 📊 **핵심 시스템 정보 (암기 필수)**
 
-### **🗂️ 시스템 경로**
+### **🗂️ 시스템 경로 (2025-10-02 업데이트)**
 ```
 프로젝트 루트: /home/roarm_m3/dev_roarm/roarm_mcp
-Isaac Sim: /home/roarm_m3/isaac_sim
-백업 디렉토리: /home/roarm_m3/dev_roarm/roarm_mcp/backup
-로그 디렉토리: /home/roarm_m3/dev_roarm/roarm_mcp/daily_log
+Isaac Sim 5.0: /home/roarm_m3/isaac_sim
+Isaac Sim 통합 솔루션: /home/roarm_m3/dev_roarm/roarm_mcp/isaac_sim_integration/
+완성된 솔루션: isaac_sim_integration/solutions/isaac_sim_physx_tensors_solution.py
+테스트 아카이브: /home/roarm_m3/dev_roarm/roarm_mcp/tests_archive/
+백업 디렉토리: /home/roarm_m3/dev_roarm/roarm_mcp/backup/
+로그 디렉토리: /home/roarm_m3/dev_roarm/roarm_mcp/logs/
 ```
 
-### **🔧 핵심 모듈 구조**
+### **🔧 핵심 모듈 구조 (Isaac Sim 5.0 통합)**
 ```
-MCP 프로토콜: mcp/ (protocol.py, server.py, client.py)
-Isaac Sim 통합: isaac_sim/ (simulator.py)
+MCP 프로토콜: mcp/ (protocol.py, server.py, client.py, isaac_sim_handler.py)
+Isaac Sim 5.0 통합: isaac_sim_integration/ (완성된 PhysX Tensors 솔루션)
+MCP 서버/클라이언트: examples/ (run_isaac_sim_server.py, isaac_sim_client.py)
 로봇 제어: robot/ (controller.py, arms.py)
 강화학습 환경: envs/ (robot_env.py)
 설정 파일: config/ (mcp_config.yaml, robot_config.yaml, rl_config.yaml)
-예제 스크립트: examples/ (run_server.py, sample_client.py)
+개발 히스토리: tests_archive/ (이전 테스트 파일들)
 ```
+
+---
+
+## **🚀 프로젝트 목표 (Isaac Sim 5.0 MCP 통합)**
+RoArm 로봇을 Isaac Sim 5.0에서 제어하는 MCP (Model Context Protocol) 시스템 개발
+
+### **📅 개발 단계 (현재 상태: 2025-10-02)**
+1. **✅ Isaac Sim 5.0 연동 (완료)**
+   - Isaac Sim 5.0 PhysX Tensors API 통합 완료
+   - Isaac Sim MCP 핸들러 구현 완료 (mcp/isaac_sim_handler.py)
+   - 클라우드 에셋 로딩 시스템 구축 완료
+   - 완성된 솔루션: isaac_sim_integration/solutions/isaac_sim_physx_tensors_solution.py
+
+2. **🔄 MCP 서버 구축 (진행 중)**
+   - 서버/클라이언트 구조 구현 완료
+   - Isaac Sim 실행 환경 스크립트 생성 완료 (examples/)
+   - 통합 테스트 및 검증 단계
+   - **다음 작업**: Isaac Sim MCP 서버 통합 테스트
+
+3. **📋 센서 데이터 통합 (다음 단계)**
+   - 카메라, LiDAR 센서 데이터 처리
+   - 상태 정보 실시간 전송
+   - 환경 인식 기능 개발
+   - Isaac Sim Sensors API 연동
+
+4. **🎯 고급 제어 기능 (계획)**
+   - 경로 추적 (trajectory tracking)
+   - 역기구학 (inverse kinematics)
+   - 충돌 회피 알고리즘
+   - 실시간 피드백 제어
+
+---
 
 ### **⚠️ 주의사항**
 ```
@@ -273,64 +330,97 @@ MCP 서버: WebSocket 포트 8765 (기본값)
 
 ---
 
-## 🔥 **긴급 상황 대응**
+## 🔥 **긴급 상황 대응 (Isaac Sim 5.0 업데이트)**
 
-### **Isaac Sim 관련 오류 발생 시**
-1. **Isaac Sim 환경 진단**
+### **Isaac Sim 5.0 관련 오류 발생 시**
+1. **Isaac Sim 5.0 환경 진단**
    ```bash
    cd ~/isaac_sim
-   ls -la  # 설치 확인
+   ls -la python.sh  # Isaac Sim Python 실행파일 확인
    nvidia-smi  # GPU 상태 확인
+   ./python.sh -c "import omni.isaac.core; print('Isaac Sim OK')"  # 모듈 테스트
    ```
 
-2. **GPU 메모리 확인**
+2. **PhysX Tensors 솔루션 확인**
    ```bash
-   nvidia-smi
-   ps aux | grep isaac  # Isaac Sim 프로세스 확인
+   cd /home/roarm_m3/isaac_sim
+   ./python.sh /home/roarm_m3/dev_roarm/roarm_mcp/isaac_sim_integration/solutions/isaac_sim_physx_tensors_solution.py
+   # 위 명령이 실행되면 Isaac Sim 5.0 환경 정상
    ```
 
-3. **MCP 서버 재시작**
+3. **Isaac Sim MCP 서버 재시작**
    ```bash
-   pkill -f run_server
-   cd /home/roarm_m3/dev_roarm/roarm_mcp
-   python -m examples.run_server --env-type joint_position --robot-type ur10
+   # 기존 프로세스 종료
+   pkill -f isaac_sim_server
+   ps aux | grep isaac_sim  # 프로세스 확인
+   
+   # 새로 시작 (Isaac Sim 환경에서)
+   cd /home/roarm_m3/isaac_sim
+   ./python.sh /home/roarm_m3/dev_roarm/roarm_mcp/examples/run_isaac_sim_server.py --robot-type ur10 --headless
    ```
 
 ### **MCP 통신 오류 발생 시**
-1. **포트 확인**
+1. **포트 8765 확인**
    ```bash
    netstat -an | grep 8765  # 포트 사용 확인
    lsof -i :8765  # 포트 사용 프로세스 확인
    ```
 
-2. **서버-클라이언트 연결 테스트**
+2. **Isaac Sim MCP 서버-클라이언트 연결 테스트**
    ```bash
-   # 별도 터미널에서 클라이언트 테스트
-   python -m examples.sample_client --server-url ws://localhost:8765
+   # 터미널 1: Isaac Sim MCP 서버
+   cd /home/roarm_m3/isaac_sim
+   ./python.sh /home/roarm_m3/dev_roarm/roarm_mcp/examples/run_isaac_sim_server.py --robot-type ur10 --headless
+   
+   # 터미널 2: 클라이언트 테스트
+   cd /home/roarm_m3/dev_roarm/roarm_mcp
+   python examples/isaac_sim_client.py --server-url ws://localhost:8765 --robot-type ur10
    ```
 
 3. **백업 복구** (필요시)
    ```bash
    cp backup/[백업파일] [원본파일]
+   # 또는 tests_archive에서 이전 버전 복구
+   cp tests_archive/[이전_버전] [현재_위치]
    ```
 
-4. **문서 업데이트**
-   - daily_log에 오류 상황 및 해결책 즉시 기록
+4. **로그 확인**
+   ```bash
+   tail -f /home/roarm_m3/dev_roarm/roarm_mcp/logs/isaac_sim_mcp.log
+   ```
+
+5. **문서 업데이트**
+   - 오류 상황 및 해결책을 현재 프로젝트 구조에 맞게 기록
 
 ---
 
-## ✅ **작업 완료 기준**
+## ✅ **작업 완료 기준 (Isaac Sim 5.0 MCP 통합)**
 
 ### **완료 선언 전 필수 확인**
-- [ ] MCP 서버-클라이언트 통신 테스트 통과
-- [ ] Isaac Sim 시뮬레이션 정상 작동 확인
-- [ ] 로봇 제어 안전성 검증 완료
-- [ ] 강화학습 환경 기본 동작 확인
-- [ ] 통합 테스트 수행 완료
-- [ ] daily_log 업데이트 완료
-- [ ] 백업 파일 정리 완료 (필요시)
+- [ ] Isaac Sim 5.0 MCP 서버-클라이언트 통신 테스트 통과
+- [ ] Isaac Sim 5.0 PhysX Tensors 시뮬레이션 정상 작동 확인
+- [ ] 로봇 제어 안전성 검증 완료 (UR10 기준)
+- [ ] MCP 프로토콜 메시지 송수신 안정성 확인
+- [ ] Isaac Sim 환경에서 서버 실행 안정성 확인
+- [ ] 통합 테스트 수행 완료 (examples/ 스크립트 기준)
+- [ ] 프로젝트 문서 업데이트 완료 (현재 구조 반영)
+- [ ] 백업 및 tests_archive 정리 완료 (필요시)
 - [ ] GitHub 커밋 및 문서 업데이트 완료
-- [ ] 다음 작업 계획 수립 완료
+- [ ] 다음 작업 계획 수립 완료 (센서 데이터 통합 단계)
+
+### **현재 단계별 검증 기준 (2025-10-02)**
+**단계 1 - Isaac Sim 5.0 연동: ✅ 완료**
+- [x] PhysX Tensors API 통합 완료
+- [x] Isaac Sim MCP 핸들러 구현 완료
+- [x] 완성된 솔루션 생성 완료
+
+**단계 2 - MCP 서버 구축: 🔄 진행 중**
+- [x] 서버/클라이언트 구조 구현 완료
+- [x] Isaac Sim 실행 환경 스크립트 생성 완료
+- [ ] **다음**: Isaac Sim MCP 서버 통합 테스트
+
+**단계 3 - 센서 데이터 통합: 📋 대기 중**
+**단계 4 - 고급 제어 기능: 🎯 계획 단계**
 
 ---
 
