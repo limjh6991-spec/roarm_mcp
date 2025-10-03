@@ -1,0 +1,26 @@
+
+1. ~/dev_roarm/roarm_mcp/isaac_sim_integration/README.md
+2. ~/dev_roarm/README.md
+3. ~/dev_roarm/isaac_sim_integration/robot_loading_test_results.md
+순서대로 문서 확인
+
+~/dev_roarm/roarm_mcp/docs/roarm_mcp_work_guide.md 
+가이드 먼저 확인 후 가이드대로 진행
+
+📑 핵심 현황 요약 파일들 순위
+🥇 1순위: Isaac Sim 통합 전용 README
+파일: isaac_sim_integration/README.md
+
+가장 집중된 현황 요약
+Isaac Sim 5.0 솔루션만 다룸
+실행 방법, 해결 문제점, 성과 모두 포함
+🥈 2순위: 메인 프로젝트 README
+파일: README.md
+
+전체 프로젝트 개요 + Isaac Sim 5.0 섹션
+프로젝트 구조와 설치 방법도 포함
+🥉 3순위: 테스트 결과 문서
+파일: isaac_sim_integration/robot_loading_test_results.md
+
+기술적 테스트 결과 상세 기록
+성공/실패 항목별 정리

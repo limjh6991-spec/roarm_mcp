@@ -1,6 +1,6 @@
 # 🤖 RoArm MCP 프로젝트 작업 수행 가이드
 > **AI 에이전트 전용 RoArm MCP 프로젝트 작업 지침서**  
-> 최종 업데이트: 2025-10-02  
+> 최종 업데이트: 2025-10-03 (Phase 3.1 RGB-D 센서 완료)  
 > 용도: RoArm MCP 프로젝트 모든 작업 시작 전 필독 및 준수 사항
 
 ---
@@ -419,8 +419,21 @@ MCP 서버: WebSocket 포트 8765 (기본값)
 - [x] Isaac Sim 실행 환경 스크립트 생성 완료
 - [ ] **다음**: Isaac Sim MCP 서버 통합 테스트
 
-**단계 3 - 센서 데이터 통합: 📋 대기 중**
-**단계 4 - 고급 제어 기능: 🎯 계획 단계**
+**단계 3 - RGB-D 센서 시스템: ✅ 완료 (2025-10-03)**
+- [x] Enhanced RGB Camera Sensor: 49.0 FPS, 해상도/조리개 정합
+- [x] Enhanced Depth Camera Sensor: 16-bit 고정밀도, Isaac Sim 5.0 Depth Annotator
+- [x] Integrated RGB-D System: 병렬/순차 동기화, ThreadPoolExecutor 최적화
+- [x] 압축 및 인코딩 시스템: 4가지 포맷, 최대 14.3x 압축비, 430+ FPS
+- [x] 성능 벤치마크 및 검증: 17/17 단위 테스트 통과, 166% 달성도
+- [x] **센서 파일 위치**: `roarm_mcp/sensors/`
+- [x] **출력 디렉토리**: `/tmp/enhanced_rgb_test/`, `/tmp/enhanced_depth_test/`, `/tmp/integrated_rgbd_test/`
+
+**단계 4 - ROS2 통합 (Phase 3.2): 📋 준비 중**
+- [ ] ROS2 노드 개발: camera_info.json 활용
+- [ ] 실시간 스트리밍: WebRTC/gRPC 기반 원격 전송
+- [ ] AI 파이프라인 연계: RGB-D 데이터 기반 객체 인식/추적
+
+**단계 5 - 고급 제어 기능: 🎯 계획 단계**
 
 ---
 

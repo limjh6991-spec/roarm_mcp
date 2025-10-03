@@ -100,6 +100,12 @@ if not ur10_xform.GetOrderedXformOps():
 이 테스트를 통해 Isaac Sim 5.0에서 로봇 모델을 안정적으로 로딩할 수 있는 기반을 마련했습니다. 
 다음 단계에서는 이 기반 위에 실제 로봇 제어 및 MCP 통신 기능을 구축할 예정입니다.
 
+## 🎯 Phase 3.1 업데이트 (2025-10-03)
+
+**RGB-D 카메라 센서 시스템 개발 완료!**  
+- Isaac Sim 5.0 기반 고품질 RGB-D 이미지 캡처 시스템 구축
+- 상세 내용은 `PHASE_3_1_COMPLETION_REPORT.md` 참조
+
 ---
 
 **테스트 수행**: GitHub Copilot  
