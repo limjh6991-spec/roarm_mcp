@@ -1,0 +1,3 @@
+Hello from the input file!
+This is the text that the agent will read and write to a new file.
+This demonstrates the successful execution of a multi-step task.
