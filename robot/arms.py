@@ -1,7 +1,10 @@
-"""
-Specific robot arm implementations for RoArm MCP.
+"""Specific robot arm implementations for RoArm MCP.
 
-This module provides specific robot arm implementations for different models.
+This module provides concrete implementations for various robot arm models,
+such as the UR10 and Franka Emika Panda. Each class encapsulates the robot's
+specific properties, such as its USD path, joint limits, and home position.
+These classes interface with the `IsaacSimRobotEnv` for simulation and use a
+`PositionController` for motion control.
 """
 
 import os
@@ -18,7 +21,21 @@ logger = logging.getLogger(__name__)
 
 
 class UR10Robot:
-    """UR10 robot arm implementation."""
+    """Represents the UR10 robot arm.
+
+    This class encapsulates the configuration and control for the Universal
+    Robots UR10 model. It defines the robot's USD path, name, joint limits,
+    and provides methods for controlling it within the Isaac Sim environment.
+
+    Attributes:
+        usd_path (str): The path to the robot's USD file for simulation.
+        robot_name (str): The name assigned to the robot in the simulation.
+        robot_env (IsaacSimRobotEnv): The simulation environment for the robot.
+        controller (PositionController): The controller for executing joint
+            position commands.
+        joint_limits (Dict[str, np.ndarray]): A dictionary containing the
+            lower and upper joint limits.
+    """
     
     def __init__(
         self,
@@ -26,12 +43,15 @@ class UR10Robot:
         usd_path: str = "/Isaac/Robots/UR10/ur10.usd",
         robot_name: str = "ur10"
     ):
-        """Initialize the UR10 robot arm.
-        
+        """Initializes the UR10 robot arm.
+
         Args:
-            robot_env: The robot environment. If None, a new environment will be created.
-            usd_path: The path to the USD file for the UR10 robot.
-            robot_name: The name of the robot.
+            robot_env (Optional[IsaacSimRobotEnv]): An existing robot
+                environment. If None, a new one is created. Defaults to None.
+            usd_path (str): The path to the USD file for the UR10 robot.
+                Defaults to "/Isaac/Robots/UR10/ur10.usd".
+            robot_name (str): The name of the robot in the simulation.
+                Defaults to "ur10".
         """
         self.usd_path = usd_path
         self.robot_name = robot_name
@@ -55,37 +75,56 @@ class UR10Robot:
         }
         
     def get_home_position(self) -> np.ndarray:
-        """Get the home position of the robot.
-        
+        """Gets the predefined home joint positions for the UR10 robot.
+
         Returns:
-            The home position as a numpy array.
+            np.ndarray: The home position as a NumPy array of joint angles
+            in radians.
         """
         return np.array([0.0, -np.pi/2, 0.0, -np.pi/2, 0.0, 0.0])
     
     def move_to_home(self) -> None:
-        """Move the robot to the home position."""
+        """Moves the robot to its predefined home position."""
         home_position = self.get_home_position()
         self.controller.move_to_joint_positions(home_position)
         
     def get_joint_limits(self) -> Dict[str, np.ndarray]:
-        """Get the joint limits of the robot.
-        
+        """Gets the joint limits of the robot.
+
         Returns:
-            A dictionary with "lower" and "upper" joint limits.
+            Dict[str, np.ndarray]: A dictionary with "lower" and "upper"
+            keys, each mapping to a NumPy array of joint limits in radians.
         """
         return self.joint_limits
         
     def get_end_effector_link_name(self) -> str:
-        """Get the name of the end-effector link.
-        
+        """Gets the name of the end-effector link for this robot.
+
+        This is used to identify the correct link for end-effector position
+        control.
+
         Returns:
-            The name of the end-effector link.
+            str: The name of the end-effector link ("tool0").
         """
         return "tool0"
 
 
 class FrankaRobot:
-    """Franka Emika Panda robot arm implementation."""
+    """Represents the Franka Emika Panda robot arm.
+
+    This class encapsulates the configuration and control for the Franka Emika
+    Panda model. It defines the robot's USD path, name, joint limits, and
+    provides methods for controlling it within the Isaac Sim environment.
+
+    Attributes:
+        usd_path (str): The path to the robot's USD file for simulation.
+        robot_name (str): The name assigned to the robot in the simulation.
+        robot_env (IsaacSimRobotEnv): The simulation environment for the robot.
+        controller (PositionController): The controller for executing joint
+            position commands.
+        joint_limits (Dict[str, np.ndarray]): A dictionary containing the
+            lower and upper joint limits.
+    """
     
     def __init__(
         self,
@@ -93,12 +132,15 @@ class FrankaRobot:
         usd_path: str = "/Isaac/Robots/Franka/franka.usd",
         robot_name: str = "franka"
     ):
-        """Initialize the Franka robot arm.
-        
+        """Initializes the Franka robot arm.
+
         Args:
-            robot_env: The robot environment. If None, a new environment will be created.
-            usd_path: The path to the USD file for the Franka robot.
-            robot_name: The name of the robot.
+            robot_env (Optional[IsaacSimRobotEnv]): An existing robot
+                environment. If None, a new one is created. Defaults to None.
+            usd_path (str): The path to the USD file for the Franka robot.
+                Defaults to "/Isaac/Robots/Franka/franka.usd".
+            robot_name (str): The name of the robot in the simulation.
+                Defaults to "franka".
         """
         self.usd_path = usd_path
         self.robot_name = robot_name
@@ -122,30 +164,35 @@ class FrankaRobot:
         }
         
     def get_home_position(self) -> np.ndarray:
-        """Get the home position of the robot.
-        
+        """Gets the predefined home joint positions for the Franka robot.
+
         Returns:
-            The home position as a numpy array.
+            np.ndarray: The home position as a NumPy array of joint angles
+            in radians.
         """
         return np.array([0.0, -0.3, 0.0, -1.8, 0.0, 1.5, 0.0])
     
     def move_to_home(self) -> None:
-        """Move the robot to the home position."""
+        """Moves the robot to its predefined home position."""
         home_position = self.get_home_position()
         self.controller.move_to_joint_positions(home_position)
         
     def get_joint_limits(self) -> Dict[str, np.ndarray]:
-        """Get the joint limits of the robot.
-        
+        """Gets the joint limits of the robot.
+
         Returns:
-            A dictionary with "lower" and "upper" joint limits.
+            Dict[str, np.ndarray]: A dictionary with "lower" and "upper"
+            keys, each mapping to a NumPy array of joint limits in radians.
         """
         return self.joint_limits
         
     def get_end_effector_link_name(self) -> str:
-        """Get the name of the end-effector link.
-        
+        """Gets the name of the end-effector link for this robot.
+
+        This is used to identify the correct link for end-effector position
+        control.
+
         Returns:
-            The name of the end-effector link.
+            str: The name of the end-effector link ("panda_hand").
         """
         return "panda_hand"

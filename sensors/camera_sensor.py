@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""
-RGB Camera Sensor Module for Isaac Sim 5.0
-Isaac Sim 5.0 RGB 카메라 센서 모듈
+"""RGB Camera Sensor module for Isaac Sim.
 
-이 모듈은 Isaac Sim 5.0의 Camera API를 사용하여
-RGB 이미지 캡처 및 실시간 스트리밍 기능을 제공합니다.
+This module provides a class to interface with an RGB camera within the NVIDIA
+Isaac Sim environment. It handles the creation, configuration, and data
+capture from a simulated camera, offering functionalities for capturing raw
+image data and encoded images for streaming.
 """
 
 import numpy as np
@@ -17,24 +17,23 @@ import logging
 from typing import Optional, Tuple, Dict, Any
 import time
 
-# Isaac Sim 5.0 imports
+# Isaac Sim imports
 try:
     from isaacsim.sensors.camera import Camera
-    from isaacsim.core.utils.prims import create_prim
+    from isaacsim.core.utils.prims import get_prim_at_path
     from isaacsim.core.utils.stage import get_current_stage
-    from pxr import Usd, UsdGeom, Gf
+    from pxr import UsdGeom
     ISAAC_SIM_AVAILABLE = True
-except ImportError as e:
-    # Fallback to older Isaac Sim import paths
+except ImportError:
     try:
         from omni.isaac.sensor import Camera
-        from omni.isaac.core.utils.prims import create_prim
+        from omni.isaac.core.utils.prims import get_prim_at_path
         from omni.isaac.core.utils.stage import get_current_stage
-        from pxr import Usd, UsdGeom, Gf
+        from pxr import UsdGeom
         ISAAC_SIM_AVAILABLE = True
-        logging.info("Using legacy Isaac Sim import paths")
-    except ImportError as e2:
-        logging.warning(f"Isaac Sim modules not available: {e}, {e2}")
+        logging.info("Using legacy Isaac Sim import paths.")
+    except ImportError as e:
+        logging.warning(f"Isaac Sim modules not available: {e}. Camera functionality will be disabled.")
         ISAAC_SIM_AVAILABLE = False
 
 # Initialize logging
@@ -42,7 +41,20 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class RGBCameraSensor:
-    """Isaac Sim 5.0 RGB 카메라 센서 클래스"""
+    """Manages an RGB camera sensor within the Isaac Sim environment.
+
+    This class encapsulates the logic for creating and controlling a camera,
+    capturing RGB images, and providing performance metrics.
+
+    Attributes:
+        prim_path (str): The path of the camera prim in the USD stage.
+        position (np.ndarray): The 3D position of the camera.
+        target (np.ndarray): The 3D position the camera is pointing at.
+        resolution (Tuple[int, int]): The (width, height) resolution of the camera.
+        frequency (float): The capture frequency in Hz.
+        camera (Optional[Camera]): The underlying Isaac Sim Camera object.
+        is_initialized (bool): True if the camera has been successfully initialized.
+    """
     
     def __init__(self, 
                  prim_path: str = "/World/RGBCamera",
@@ -50,15 +62,14 @@ class RGBCameraSensor:
                  target: np.ndarray = np.array([0.0, 0.0, 0.0]),
                  resolution: Tuple[int, int] = (1280, 720),
                  frequency: float = 30.0):
-        """
-        RGB 카메라 센서 초기화
-        
+        """Initializes the RGBCameraSensor.
+
         Args:
-            prim_path: USD 씬에서의 카메라 경로
-            position: 카메라 3D 위치 (x, y, z)
-            target: 카메라가 바라볼 타겟 위치
-            resolution: 이미지 해상도 (width, height)
-            frequency: 캡처 주파수 (FPS)
+            prim_path (str): The path for the camera prim in the USD stage.
+            position (np.ndarray): The 3D world position (x, y, z) of the camera.
+            target (np.ndarray): The 3D world position for the camera to look at.
+            resolution (Tuple[int, int]): The image resolution (width, height).
+            frequency (float): The capture frequency in frames per second.
         """
         self.prim_path = prim_path
         self.position = position
@@ -68,117 +79,101 @@ class RGBCameraSensor:
         self.camera = None
         self.is_initialized = False
         
-        # 성능 모니터링
+        # Performance monitoring
         self.capture_count = 0
         self.last_capture_time = 0
         self.fps_history = []
         
-        logger.info(f"🎥 RGBCameraSensor 초기화: {prim_path}")
-        logger.info(f"   위치: {position}, 타겟: {target}")
-        logger.info(f"   해상도: {resolution}, 주파수: {frequency}Hz")
+        logger.info(f"🎥 RGBCameraSensor created for prim path: {prim_path}")
         
     def initialize(self) -> bool:
-        """
-        카메라 센서 초기화 및 Isaac Sim 씬에 추가
-        
+        """Initializes the camera sensor and adds it to the Isaac Sim stage.
+
+        This method creates the underlying Isaac Sim `Camera` object and configures
+        its properties.
+
         Returns:
-            bool: 초기화 성공 여부
+            bool: True if initialization was successful, False otherwise.
         """
         if not ISAAC_SIM_AVAILABLE:
-            logger.error("❌ Isaac Sim 모듈을 사용할 수 없습니다")
+            logger.error("❌ Cannot initialize camera: Isaac Sim modules are not available.")
             return False
             
         try:
-            logger.info("🎬 RGB 카메라 센서 초기화 중...")
-            
-            # Isaac Sim Camera 생성
+            logger.info("🎬 Initializing RGB camera sensor...")
             self.camera = Camera(
                 prim_path=self.prim_path,
                 position=self.position,
-                target=self.target,
+                look_at=self.target,
                 resolution=self.resolution,
                 frequency=self.frequency
             )
-            
-            # 카메라 속성 설정
+            self.camera.initialize()
             self._configure_camera_properties()
-            
             self.is_initialized = True
-            logger.info("✅ RGB 카메라 센서 초기화 완료")
+            logger.info("✅ RGB camera sensor initialized successfully.")
             return True
-            
         except Exception as e:
-            logger.error(f"❌ RGB 카메라 초기화 실패: {e}")
+            logger.error(f"❌ Failed to initialize RGB camera: {e}", exc_info=True)
             return False
             
     def _configure_camera_properties(self):
-        """카메라 세부 속성 설정"""
+        """Sets detailed properties for the camera prim."""
         if not self.camera:
             return
-            
         try:
-            # 카메라 파라미터 설정
             camera_prim = get_current_stage().GetPrimAtPath(self.prim_path)
             if camera_prim:
-                # FOV 설정 (시야각)
                 camera_api = UsdGeom.Camera(camera_prim)
-                camera_api.GetFocalLengthAttr().Set(24.0)  # 24mm 렌즈
-                camera_api.GetFStopAttr().Set(2.8)  # F-stop
-                
-                logger.info("🔧 카메라 속성 설정 완료")
-                
+                camera_api.GetFocalLengthAttr().Set(24.0)
+                camera_api.GetFStopAttr().Set(2.8)
+                logger.info("🔧 Camera properties configured.")
         except Exception as e:
-            logger.warning(f"⚠️ 카메라 속성 설정 부분 실패: {e}")
+            logger.warning(f"⚠️ Failed to configure some camera properties: {e}")
             
     def capture_rgb_image(self) -> Optional[np.ndarray]:
-        """
-        RGB 이미지 캡처
-        
+        """Captures an RGB image from the sensor.
+
         Returns:
-            np.ndarray: RGB 이미지 데이터 (H, W, 3) 또는 None
+            Optional[np.ndarray]: The captured RGB image as a NumPy array (H, W, 3),
+            or None if the capture fails.
         """
         if not self.is_initialized or not self.camera:
-            logger.error("❌ 카메라가 초기화되지 않았습니다")
+            logger.error("❌ Camera is not initialized.")
             return None
             
         try:
-            # Isaac Sim에서 RGBA 이미지 캡처
             rgba_data = self.camera.get_rgba()
-            
-            if rgba_data is None:
-                logger.warning("⚠️ 카메라에서 이미지를 가져올 수 없습니다")
+            if rgba_data is None or not rgba_data.shape[0]:
+                logger.warning("⚠️ Could not get image from camera.")
                 return None
-                
-            # RGBA에서 RGB만 추출 (Alpha 채널 제거)
-            rgb_data = rgba_data[:, :, :3]
             
-            # 성능 모니터링 업데이트
+            rgb_data = rgba_data[:, :, :3].copy()
             self._update_performance_metrics()
-            
-            logger.debug(f"📸 RGB 이미지 캡처 완료: {rgb_data.shape}")
+            logger.debug(f"📸 RGB image captured with shape: {rgb_data.shape}")
             return rgb_data
-            
         except Exception as e:
-            logger.error(f"❌ RGB 이미지 캡처 실패: {e}")
+            logger.error(f"❌ Failed to capture RGB image: {e}", exc_info=True)
             return None
             
     def _update_performance_metrics(self):
-        """성능 메트릭 업데이트"""
+        """Updates internal performance metrics like FPS."""
         current_time = time.time()
-        
         if self.last_capture_time > 0:
             fps = 1.0 / (current_time - self.last_capture_time)
             self.fps_history.append(fps)
-            
-            # 최근 10개 프레임의 평균 FPS 유지
-            if len(self.fps_history) > 10:
+            if len(self.fps_history) > 30: # Keep last 30 samples
                 self.fps_history.pop(0)
-                
         self.last_capture_time = current_time
         self.capture_count += 1
         
     def get_performance_metrics(self) -> Dict[str, Any]:
-        """성능 메트릭 반환"""
+        """Returns a dictionary of performance metrics.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing metrics like average FPS
+            and total captures.
+        """
         if not self.fps_history:
             return {"fps": 0.0, "capture_count": self.capture_count}
             
@@ -190,51 +185,37 @@ class RGBCameraSensor:
             "fps_stability": round(np.std(self.fps_history), 2)
         }
         
-    def capture_and_encode_image(self, 
-                               quality: int = 85,
-                               format: str = "JPEG") -> Optional[str]:
-        """
-        RGB 이미지 캡처 및 Base64 인코딩
-        
+    def capture_and_encode_image(self, quality: int = 90, img_format: str = ".jpg") -> Optional[str]:
+        """Captures an image and encodes it to a Base64 string.
+
         Args:
-            quality: JPEG 압축 품질 (1-100)
-            format: 이미지 포맷 ("JPEG" 또는 "PNG")
-            
+            quality (int): The compression quality for JPEG (1-100).
+            img_format (str): The image format to encode to (e.g., ".jpg", ".png").
+
         Returns:
-            str: Base64 인코딩된 이미지 문자열 또는 None
+            Optional[str]: The Base64 encoded image string, or None on failure.
         """
-        # RGB 이미지 캡처
         rgb_image = self.capture_rgb_image()
         if rgb_image is None:
             return None
             
         try:
-            # OpenCV 형식으로 변환 (BGR)
             bgr_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
-            
-            # 이미지 압축
-            if format.upper() == "JPEG":
-                encode_param = [cv2.IMWRITE_JPEG_QUALITY, quality]
-                _, buffer = cv2.imencode('.jpg', bgr_image, encode_param)
-            elif format.upper() == "PNG":
-                encode_param = [cv2.IMWRITE_PNG_COMPRESSION, 9]
-                _, buffer = cv2.imencode('.png', bgr_image, encode_param)
-            else:
-                logger.error(f"❌ 지원하지 않는 이미지 포맷: {format}")
-                return None
-                
-            # Base64 인코딩
+            encode_param = [cv2.IMWRITE_JPEG_QUALITY, quality] if img_format == ".jpg" else []
+            _, buffer = cv2.imencode(img_format, bgr_image, encode_param)
             encoded_image = base64.b64encode(buffer).decode('utf-8')
-            
-            logger.debug(f"🔐 이미지 인코딩 완료: {len(encoded_image)} 문자")
+            logger.debug(f"🔐 Image encoded to Base64 (length: {len(encoded_image)}).")
             return encoded_image
-            
         except Exception as e:
-            logger.error(f"❌ 이미지 인코딩 실패: {e}")
+            logger.error(f"❌ Failed to encode image: {e}", exc_info=True)
             return None
             
     def get_camera_info(self) -> Dict[str, Any]:
-        """카메라 정보 반환"""
+        """Returns a dictionary with the camera's current configuration and status.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing camera information.
+        """
         return {
             "prim_path": self.prim_path,
             "position": self.position.tolist(),
@@ -245,95 +226,85 @@ class RGBCameraSensor:
             "performance": self.get_performance_metrics()
         }
         
-    def update_position(self, 
-                       position: Optional[np.ndarray] = None,
-                       target: Optional[np.ndarray] = None):
-        """
-        카메라 위치 업데이트
-        
+    def update_pose(self, position: Optional[np.ndarray] = None, target: Optional[np.ndarray] = None):
+        """Updates the camera's position and/or target look_at point.
+
         Args:
-            position: 새로운 카메라 위치
-            target: 새로운 타겟 위치
+            position (Optional[np.ndarray]): The new camera position.
+            target (Optional[np.ndarray]): The new target position to look at.
         """
         if not self.is_initialized or not self.camera:
-            logger.warning("⚠️ 카메라가 초기화되지 않아 위치를 업데이트할 수 없습니다")
+            logger.warning("⚠️ Camera not initialized, cannot update pose.")
             return
             
         try:
             if position is not None:
                 self.position = position
-                self.camera.set_world_pose(position=position)
-                logger.info(f"📍 카메라 위치 업데이트: {position}")
-                
             if target is not None:
                 self.target = target
-                # 타겟 방향으로 카메라 회전
-                direction = target - self.position
-                direction = direction / np.linalg.norm(direction)
-                # TODO: 회전 행렬 계산 및 적용
-                logger.info(f"🎯 카메라 타겟 업데이트: {target}")
-                
+
+            self.camera.set_world_pose(position=self.position, look_at=self.target)
+            logger.info(f"📍 Camera pose updated: pos={self.position}, target={self.target}")
         except Exception as e:
-            logger.error(f"❌ 카메라 위치 업데이트 실패: {e}")
+            logger.error(f"❌ Failed to update camera pose: {e}", exc_info=True)
             
     def cleanup(self):
-        """리소스 정리"""
+        """Cleans up resources used by the camera."""
         try:
             if self.camera:
-                # Isaac Sim 카메라 정리
                 self.camera = None
-                
             self.is_initialized = False
-            logger.info("🧹 RGB 카메라 센서 정리 완료")
-            
+            logger.info("🧹 RGB camera sensor cleaned up.")
         except Exception as e:
-            logger.error(f"❌ 카메라 정리 실패: {e}")
+            logger.error(f"❌ Failed to clean up camera: {e}", exc_info=True)
             
     def __enter__(self):
-        """Context manager 진입"""
+        """Enters the context manager, initializing the camera."""
         if self.initialize():
             return self
-        else:
-            raise RuntimeError("카메라 초기화 실패")
+        raise RuntimeError("Failed to initialize camera.")
             
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager 종료"""
+        """Exits the context manager, cleaning up resources."""
         self.cleanup()
 
-# 편의 함수들
+
 def create_rgb_camera(prim_path: str = "/World/RGBCamera",
                      position: Tuple[float, float, float] = (2.0, 2.0, 2.0),
                      target: Tuple[float, float, float] = (0.0, 0.0, 0.0),
                      resolution: Tuple[int, int] = (1280, 720),
                      frequency: float = 30.0) -> RGBCameraSensor:
-    """
-    RGB 카메라 센서 생성 편의 함수
-    
+    """Factory function to create an `RGBCameraSensor`.
+
+    Args:
+        prim_path (str): The path for the camera prim in the USD stage.
+        position (Tuple[float, float, float]): The 3D world position of the camera.
+        target (Tuple[float, float, float]): The 3D world position to look at.
+        resolution (Tuple[int, int]): The image resolution (width, height).
+        frequency (float): The capture frequency in frames per second.
+
     Returns:
-        RGBCameraSensor: 초기화된 RGB 카메라 센서 인스턴스
+        RGBCameraSensor: An uninitialized `RGBCameraSensor` instance.
     """
-    camera = RGBCameraSensor(
+
+    return RGBCameraSensor(
         prim_path=prim_path,
         position=np.array(position),
         target=np.array(target),
         resolution=resolution,
         frequency=frequency
     )
-    
-    return camera
+
 
 if __name__ == "__main__":
-    # 기본 테스트 코드
-    logger.info("🧪 RGB 카메라 센서 모듈 테스트")
+    logger.info("🧪 Testing RGB Camera Sensor module...")
     
-    if ISAAC_SIM_AVAILABLE:
-        logger.info("✅ Isaac Sim 모듈 사용 가능")
-    else:
-        logger.warning("⚠️ Isaac Sim 모듈 없이 테스트 (실제 카메라 기능 제한)")
-        
-    # 카메라 센서 생성 테스트
+    if not ISAAC_SIM_AVAILABLE:
+        logger.warning("⚠️ Isaac Sim not available. Running a limited test.")
+
+    # Test camera sensor creation
     camera_sensor = create_rgb_camera()
     camera_info = camera_sensor.get_camera_info()
     
-    logger.info(f"📋 카메라 정보: {json.dumps(camera_info, indent=2)}")
-    logger.info("🎉 RGB 카메라 센서 모듈 테스트 완료")
+    logger.info(f"📋 Camera Info: {json.dumps(camera_info, indent=2)}")
+    logger.info("🎉 RGB Camera Sensor module test finished.")

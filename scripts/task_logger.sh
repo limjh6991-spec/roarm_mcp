@@ -1,93 +1,130 @@
 #!/bin/bash
+#
+# A utility script for running and logging shell commands.
+#
+# This script provides a structured way to execute commands while logging their
+# initiation, execution, and result (success or failure) to a daily log file
+# located in the `daily_log` directory. It is designed to create a traceable
+# record of tasks performed within the project.
+#
+# Features:
+#   - Automatically creates a `daily_log` directory and a new log file for each day.
+#   - Provides a `run_and_log` function to wrap command execution with logging.
+#   - Prints clear information about the task being performed to the console.
+#   - Records the exit code of the command in the log.
+#
+# Usage:
+#   To use this script's functions in another script, source it:
+#   source scripts/task_logger.sh
+#
+#   Then, use the run_and_log function:
+#   run_and_log "My Task" "A description of my task" "ls -l"
+#
+#   The script can also be run directly to see a help message or an example.
+#
 
-# 작업 시작 전 메시지 출력 함수
+# --- Functions ---
+
+# Prints a formatted header for a task to the console.
+# Globals:
+#   None
+# Arguments:
+#   $1 - The task name.
+#   $2 - A description of the task.
 print_task_info() {
     echo "======================================================"
-    echo "작업: $1"
-    echo "시간: $(date +"%Y-%m-%d %H:%M:%S")"
-    echo "설명: $2"
+    echo "Task: $1"
+    echo "Time: $(date +"%Y-%m-%d %H:%M:%S")"
+    echo "Description: $2"
     echo "======================================================"
 }
 
-# 작업 로그 디렉토리 및 파일 생성
+# Creates a log entry in the daily log file.
+# Globals:
+#   None
+# Arguments:
+#   $1 - The task name.
+#   $2 - The log message/description.
 create_log_entry() {
     local task="$1"
     local description="$2"
     
-    # 프로젝트 루트 디렉토리
-    PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-    LOG_DIR="${PROJECT_ROOT}/daily_log"
-    TODAY=$(date +"%Y%m%d")
-    LOG_FILE="${LOG_DIR}/${TODAY}.log"
+    # Define project directories
+    local project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    local log_dir="${project_root}/daily_log"
+    local today=$(date +"%Y%m%d")
+    local log_file="${log_dir}/${today}.log"
     
-    # 로그 디렉토리 생성 (없는 경우)
-    if [ ! -d "$LOG_DIR" ]; then
-        mkdir -p "$LOG_DIR"
+    # Ensure log directory and file exist
+    mkdir -p "$log_dir"
+    if [ ! -f "$log_file" ]; then
+        # Create a header for a new log file
+        echo "# RoArm MCP Task Log - $(date +"%Y-%m-%d")" > "$log_file"
     fi
     
-    # 로그 파일 생성 (없는 경우)
-    if [ ! -f "$LOG_FILE" ]; then
-        cat > "$LOG_FILE" << EOF
-# RoArm MCP 작업 로그
-# 날짜: $(date +"%Y년 %m월 %d일")
-# 작성자: RoArm M3
-
-EOF
-    fi
-    
-    # 로그 메시지 추가
-    echo "[$(date +"%H:%M:%S")] $task: $description" >> "$LOG_FILE"
+    # Append the log message
+    echo "[$(date +"%H:%M:%S")] [$task] $description" >> "$log_file"
 }
 
-# 명령어를 실행하고 로그에 기록하는 함수
+# Executes a command and logs the process and result.
+# Globals:
+#   None
+# Arguments:
+#   $1 - The task name.
+#   $2 - A description of the task.
+#   $3 - The shell command to execute.
+# Returns:
+#   The exit code of the executed command.
 run_and_log() {
     local task="$1"
     local description="$2"
     local command="$3"
     
     print_task_info "$task" "$description"
-    create_log_entry "$task" "$description"
+    create_log_entry "$task" "Starting: $description"
     
-    # 명령어 실행 전 표시
-    echo "[실행] $command"
+    echo "[EXEC] $command"
     
-    # 명령어 실행 및 결과 저장
+    # Execute the command
     eval "$command"
     local exit_code=$?
     
-    # 실행 결과 로그에 기록
+    # Log the result
     if [ $exit_code -eq 0 ]; then
-        create_log_entry "$task" "성공적으로 실행됨"
-        echo "[결과] 성공"
+        create_log_entry "$task" "Execution successful."
+        echo "[RESULT] Success"
     else
-        create_log_entry "$task" "실행 실패 (코드: $exit_code)"
-        echo "[결과] 실패 (코드: $exit_code)"
+        create_log_entry "$task" "Execution failed with exit code: $exit_code"
+        echo "[RESULT] Failure (Exit Code: $exit_code)"
     fi
     
     return $exit_code
 }
 
-# 도움말 표시
-if [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
-    echo "사용법: $0 [명령]"
+# --- Script Main Body ---
+
+# Display a help message if requested.
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    echo "Usage: $0 [command]"
     echo ""
-    echo "명령:"
-    echo "  --help, -h            도움말 표시"
-    echo "  --example             사용 예제 실행"
+    echo "A utility for running and logging tasks."
     echo ""
-    echo "예제:"
-    echo "  $0 --example"
+    echo "Commands:"
+    echo "  --help, -h    Display this help message."
+    echo "  --example     Run a pre-defined example task to demonstrate logging."
+    echo ""
+    echo "To use in your own scripts, source this file and call 'run_and_log \"Task\" \"Description\" \"command\"'."
     exit 0
 fi
 
-# 예제 실행
+# Run an example task if requested.
 if [ "$1" == "--example" ]; then
-    run_and_log "예제 실행" "로깅 시스템 테스트를 위한 예제 명령" "echo '예제 명령 실행 완료'"
+    run_and_log "Example Task" "This is an example command to test the logging system." "echo 'Example command executed successfully.'"
     exit 0
 fi
 
-# 기본 메시지
+# Default message if no arguments are provided.
 if [ -z "$1" ]; then
-    echo "RoArm MCP 작업 도구"
-    echo "사용법에 대한 정보는 '$0 --help'를 실행하세요."
+    echo "RoArm MCP Task Logger"
+    echo "Run with '--help' for usage information."
 fi

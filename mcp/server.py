@@ -1,7 +1,12 @@
-"""
-MCP server implementation for RoArm.
+"""MCP server implementation for RoArm.
 
-This module provides the server implementation for the Model Context Protocol.
+This module provides the server implementation for the Model Context Protocol (MCP),
+designed to facilitate communication between a robot arm control environment (like
+NVIDIA Isaac Sim) and a client agent. The server handles client connections,
+processes MCP messages, and interacts with a registered environment handler.
+
+The server is built on top of the `websockets` library for asynchronous
+communication.
 """
 
 import asyncio
@@ -24,14 +29,30 @@ logger = logging.getLogger(__name__)
 
 
 class MCPServer:
-    """Model Context Protocol server for robot arm control."""
+    """Model Context Protocol server for robot arm control.
+
+    This class implements a WebSocket-based server that listens for client
+    connections and facilitates interaction with a simulated or physical
+    robot environment. It manages client connections, message passing, and
+    delegates environment-specific tasks to an `MCPEnvironmentHandler`.
+
+    Attributes:
+        host (str): The hostname or IP address the server binds to.
+        port (int): The port number the server listens on.
+        server (Optional[websockets.WebSocketServer]): The underlying WebSocket
+            server instance.
+        clients (set): A set of currently connected WebSocket clients.
+        env_handler (Optional[MCPEnvironmentHandler]): The handler for the
+            robot environment.
+        running (bool): A flag indicating if the server is currently running.
+    """
 
     def __init__(self, host: str = "localhost", port: int = 8765):
-        """Initialize the MCP server.
-        
+        """Initializes the MCPServer.
+
         Args:
-            host: The host to bind to.
-            port: The port to bind to.
+            host (str): The hostname to bind the server to. Defaults to "localhost".
+            port (int): The port to bind the server to. Defaults to 8765.
         """
         self.host = host
         self.port = port
@@ -41,7 +62,12 @@ class MCPServer:
         self.running = False
 
     async def start(self) -> None:
-        """Start the MCP server."""
+        """Starts the MCP server.
+
+        This method initializes the WebSocket server and begins listening for
+        incoming client connections. If the server is already running, a warning
+        is logged and the method returns.
+        """
         if self.server is not None:
             logger.warning("Server is already running")
             return
@@ -53,7 +79,12 @@ class MCPServer:
         self.running = True
 
     async def stop(self) -> None:
-        """Stop the MCP server."""
+        """Stops the MCP server.
+
+        This method gracefully shuts down the WebSocket server and stops
+        listening for new connections. If the server is not running, a warning
+        is logged and the method returns.
+        """
         if self.server is None:
             logger.warning("Server is not running")
             return
@@ -64,11 +95,16 @@ class MCPServer:
         self.server = None
         self.running = False
 
-    def register_env_handler(self, handler) -> None:
-        """Register an environment handler.
-        
+    def register_env_handler(self, handler: 'MCPEnvironmentHandler') -> None:
+        """Registers an environment handler.
+
+        The environment handler is responsible for implementing the logic for
+        interacting with the robot environment (e.g., resetting the simulation,
+        executing actions).
+
         Args:
-            handler: The environment handler to register.
+            handler (MCPEnvironmentHandler): The environment handler instance
+                to register with the server.
         """
         self.env_handler = handler
         logger.info("Environment handler registered")
@@ -76,11 +112,16 @@ class MCPServer:
     async def handle_client(
         self, websocket: websockets.WebSocketServerProtocol, path: str
     ) -> None:
-        """Handle a client connection.
-        
+        """Handles a new client connection.
+
+        This method is the main entry point for a new client connection. It
+        manages the client's lifecycle, listening for incoming messages and
+        processing them accordingly.
+
         Args:
-            websocket: The websocket connection.
-            path: The connection path.
+            websocket (websockets.WebSocketServerProtocol): The WebSocket
+                connection object for the client.
+            path (str): The requested path for the WebSocket connection.
         """
         if self.env_handler is None:
             logger.error("No environment handler registered")
@@ -106,11 +147,15 @@ class MCPServer:
     async def process_message(
         self, websocket: websockets.WebSocketServerProtocol, message: str
     ) -> None:
-        """Process a message from a client.
-        
+        """Processes a single message from a client.
+
+        This method deserializes the message, identifies its type, and calls
+        the appropriate handler function.
+
         Args:
-            websocket: The websocket connection.
-            message: The message to process.
+            websocket (websockets.WebSocketServerProtocol): The WebSocket
+                connection object for the client.
+            message (str): The raw message string received from the client.
         """
         if self.env_handler is None:
             await self.send_error(websocket, "No environment handler registered")
@@ -144,10 +189,14 @@ class MCPServer:
     async def handle_reset(
         self, websocket: websockets.WebSocketServerProtocol
     ) -> None:
-        """Handle a reset message.
-        
+        """Handles a 'RESET' message.
+
+        This method calls the environment handler's `reset` method and sends
+        the initial observation back to the client.
+
         Args:
-            websocket: The websocket connection.
+            websocket (websockets.WebSocketServerProtocol): The client's
+                WebSocket connection.
         """
         observation = await self.env_handler.reset()
         await self.send_observation(websocket, observation)
@@ -155,11 +204,16 @@ class MCPServer:
     async def handle_step(
         self, websocket: websockets.WebSocketServerProtocol, action: Any
     ) -> None:
-        """Handle a step message.
-        
+        """Handles a 'STEP' message.
+
+        This method passes the action from the client to the environment
+        handler's `step` method and sends the resulting observation, reward,
+        terminated, truncated, and info data back to the client.
+
         Args:
-            websocket: The websocket connection.
-            action: The action to take.
+            websocket (websockets.WebSocketServerProtocol): The client's
+                WebSocket connection.
+            action (Any): The action to be executed in the environment.
         """
         observation, reward, terminated, truncated, info = await self.env_handler.step(action)
         
@@ -172,10 +226,14 @@ class MCPServer:
     async def handle_render(
         self, websocket: websockets.WebSocketServerProtocol
     ) -> None:
-        """Handle a render message.
-        
+        """Handles a 'RENDER' message.
+
+        This method calls the environment handler's `render` method. No response
+        is sent to the client.
+
         Args:
-            websocket: The websocket connection.
+            websocket (websockets.WebSocketServerProtocol): The client's
+                WebSocket connection.
         """
         await self.env_handler.render()
         # No response needed for render
@@ -183,10 +241,14 @@ class MCPServer:
     async def handle_close(
         self, websocket: websockets.WebSocketServerProtocol
     ) -> None:
-        """Handle a close message.
-        
+        """Handles a 'CLOSE' message.
+
+        This method calls the environment handler's `close` method. No response
+        is sent to the client.
+
         Args:
-            websocket: The websocket connection.
+            websocket (websockets.WebSocketServerProtocol): The client's
+                WebSocket connection.
         """
         await self.env_handler.close()
         # No response needed for close
@@ -194,10 +256,14 @@ class MCPServer:
     async def handle_action_space(
         self, websocket: websockets.WebSocketServerProtocol
     ) -> None:
-        """Handle an action space message.
-        
+        """Handles an 'ACTION_SPACE' message.
+
+        This method retrieves the action space from the environment handler and
+        sends it to the client.
+
         Args:
-            websocket: The websocket connection.
+            websocket (websockets.WebSocketServerProtocol): The client's
+                WebSocket connection.
         """
         action_space = await self.env_handler.get_action_space()
         await websocket.send(json.dumps({"type": "action_space", "space": action_space.to_dict()}))
@@ -205,10 +271,14 @@ class MCPServer:
     async def handle_observation_space(
         self, websocket: websockets.WebSocketServerProtocol
     ) -> None:
-        """Handle an observation space message.
-        
+        """Handles an 'OBSERVATION_SPACE' message.
+
+        This method retrieves the observation space from the environment
+        handler and sends it to the client.
+
         Args:
-            websocket: The websocket connection.
+            websocket (websockets.WebSocketServerProtocol): The client's
+                WebSocket connection.
         """
         observation_space = await self.env_handler.get_observation_space()
         await websocket.send(json.dumps({"type": "observation_space", "space": observation_space.to_dict()}))
@@ -216,11 +286,12 @@ class MCPServer:
     async def send_observation(
         self, websocket: websockets.WebSocketServerProtocol, observation: Any
     ) -> None:
-        """Send an observation to a client.
-        
+        """Sends an observation message to a client.
+
         Args:
-            websocket: The websocket connection.
-            observation: The observation to send.
+            websocket (websockets.WebSocketServerProtocol): The client's
+                WebSocket connection.
+            observation (Any): The observation data to send.
         """
         msg = MCPObservationMessage(observation)
         await websocket.send(msg.to_json())
@@ -228,11 +299,12 @@ class MCPServer:
     async def send_reward(
         self, websocket: websockets.WebSocketServerProtocol, reward: float
     ) -> None:
-        """Send a reward to a client.
-        
+        """Sends a reward message to a client.
+
         Args:
-            websocket: The websocket connection.
-            reward: The reward to send.
+            websocket (websockets.WebSocketServerProtocol): The client's
+                WebSocket connection.
+            reward (float): The reward value to send.
         """
         msg = MCPRewardMessage(reward)
         await websocket.send(msg.to_json())
@@ -240,11 +312,12 @@ class MCPServer:
     async def send_terminated(
         self, websocket: websockets.WebSocketServerProtocol, terminated: bool
     ) -> None:
-        """Send a terminated flag to a client.
-        
+        """Sends a terminated message to a client.
+
         Args:
-            websocket: The websocket connection.
-            terminated: The terminated flag to send.
+            websocket (websockets.WebSocketServerProtocol): The client's
+                WebSocket connection.
+            terminated (bool): The terminated flag to send.
         """
         msg = MCPTerminatedMessage(terminated)
         await websocket.send(msg.to_json())
@@ -252,11 +325,12 @@ class MCPServer:
     async def send_truncated(
         self, websocket: websockets.WebSocketServerProtocol, truncated: bool
     ) -> None:
-        """Send a truncated flag to a client.
-        
+        """Sends a truncated message to a client.
+
         Args:
-            websocket: The websocket connection.
-            truncated: The truncated flag to send.
+            websocket (websockets.WebSocketServerProtocol): The client's
+                WebSocket connection.
+            truncated (bool): The truncated flag to send.
         """
         msg = MCPTruncatedMessage(truncated)
         await websocket.send(msg.to_json())
@@ -264,11 +338,12 @@ class MCPServer:
     async def send_info(
         self, websocket: websockets.WebSocketServerProtocol, info: Dict[str, Any]
     ) -> None:
-        """Send info to a client.
-        
+        """Sends an info message to a client.
+
         Args:
-            websocket: The websocket connection.
-            info: The info to send.
+            websocket (websockets.WebSocketServerProtocol): The client's
+                WebSocket connection.
+            info (Dict[str, Any]): The info dictionary to send.
         """
         msg = MCPInfoMessage(info)
         await websocket.send(msg.to_json())
@@ -276,58 +351,97 @@ class MCPServer:
     async def send_error(
         self, websocket: websockets.WebSocketServerProtocol, error: str
     ) -> None:
-        """Send an error to a client.
-        
+        """Sends an error message to a client.
+
         Args:
-            websocket: The websocket connection.
-            error: The error to send.
+            websocket (websockets.WebSocketServerProtocol): The client's
+                WebSocket connection.
+            error (str): The error message to send.
         """
         msg = MCPErrorMessage(error)
         await websocket.send(msg.to_json())
 
 
 class MCPEnvironmentHandler:
-    """Base class for environment handlers."""
+    """Abstract base class for MCP environment handlers.
+
+    This class defines the interface that an environment handler must implement
+    to be compatible with the `MCPServer`. The handler is responsible for all
+    direct interactions with the simulation or robot hardware.
+    """
 
     async def reset(self) -> Any:
-        """Reset the environment.
-        
+        """Resets the environment to an initial state.
+
         Returns:
-            The initial observation.
+            Any: The initial observation after the reset.
+
+        Raises:
+            NotImplementedError: If the method is not implemented by a subclass.
         """
         raise NotImplementedError
 
     async def step(self, action: Any) -> Tuple[Any, float, bool, bool, Dict[str, Any]]:
-        """Take a step in the environment.
-        
+        """Executes one time step in the environment.
+
         Args:
-            action: The action to take.
-            
+            action (Any): The action to be performed in the environment.
+
         Returns:
-            A tuple of (observation, reward, terminated, truncated, info).
+            Tuple[Any, float, bool, bool, Dict[str, Any]]: A tuple containing:
+                - observation (Any): The observation of the environment's state.
+                - reward (float): The reward returned after taking the action.
+                - terminated (bool): Whether the episode has ended.
+                - truncated (bool): Whether the episode was truncated.
+                - info (Dict[str, Any]): A dictionary with auxiliary diagnostic
+                  information.
+
+        Raises:
+            NotImplementedError: If the method is not implemented by a subclass.
         """
         raise NotImplementedError
 
     async def render(self) -> None:
-        """Render the environment."""
+        """Renders the environment.
+
+        The exact behavior of this method depends on the specific environment
+        implementation (e.g., it could update a GUI, save an image, etc.).
+
+        Raises:
+            NotImplementedError: If the method is not implemented by a subclass.
+        """
         raise NotImplementedError
 
     async def close(self) -> None:
-        """Close the environment."""
+        """Performs any necessary cleanup for the environment.
+
+        This method should be called when the environment is no longer needed.
+
+        Raises:
+            NotImplementedError: If the method is not implemented by a subclass.
+        """
         raise NotImplementedError
 
     async def get_action_space(self) -> Any:
-        """Get the action space.
-        
+        """Returns the action space of the environment.
+
         Returns:
-            The action space.
+            Any: An object representing the action space (e.g., a `gym.spaces`
+            object).
+
+        Raises:
+            NotImplementedError: If the method is not implemented by a subclass.
         """
         raise NotImplementedError
 
     async def get_observation_space(self) -> Any:
-        """Get the observation space.
-        
+        """Returns the observation space of the environment.
+
         Returns:
-            The observation space.
+            Any: An object representing the observation space (e.g., a
+            `gym.spaces` object).
+
+        Raises:
+            NotImplementedError: If the method is not implemented by a subclass.
         """
         raise NotImplementedError

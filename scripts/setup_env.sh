@@ -1,75 +1,97 @@
 #!/bin/bash
+#
+# A script to set up the Python development environment for the RoArm MCP project.
+#
+# This script performs the following steps:
+#   1. Determines the project's root directory.
+#   2. Creates a Python virtual environment named `.venv` in the project root
+#      if it does not already exist.
+#   3. Activates the virtual environment.
+#   4. Upgrades pip, setuptools, and wheel to the latest versions.
+#   5. Installs all required Python packages from the `requirements.txt` file.
+#   6. Checks if the current user is in the `dialout` group, which is
+#      often necessary for serial port communication with hardware, and
+#      prints a warning if they are not.
+#
+# Usage:
+#   From the project root directory, run:
+#   bash scripts/setup_env.sh
+#
 
-# 프로젝트 루트 디렉토리
+# --- Setup ---
+# Get the project root directory (the parent of the 'scripts' directory)
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="${PROJECT_ROOT}/.venv"
 LOG_DIR="${PROJECT_ROOT}/daily_log"
 TODAY=$(date +"%Y%m%d")
 LOG_FILE="${LOG_DIR}/${TODAY}.log"
 
-# 로그 디렉토리 생성 (없는 경우)
-if [ ! -d "$LOG_DIR" ]; then
-    echo "[작업] 로그 디렉토리 생성: $LOG_DIR"
-    mkdir -p "$LOG_DIR"
-fi
+# --- Functions ---
 
-# 로그 파일 생성 (없는 경우)
-if [ ! -f "$LOG_FILE" ]; then
-    echo "[작업] 새 로그 파일 생성: $LOG_FILE"
-    cat > "$LOG_FILE" << EOF
-# RoArm MCP 작업 로그
-# 날짜: $(date +"%Y년 %m월 %d일")
-# 작성자: RoArm M3
-
-EOF
-fi
-
-# 로그 메시지 추가
+# Function to add a message to the daily log file.
 log_message() {
     local message="$1"
-    local timestamp=$(date +"%H:%M:%S")
-    echo "[$(date +"%Y-%m-%d %H:%M:%S")] $message" >> "$LOG_FILE"
-    echo "[로그] $message"
+    # Ensure log directory exists before trying to write to the file
+    if [ ! -d "$LOG_DIR" ]; then
+        mkdir -p "$LOG_DIR"
+    fi
+    echo "[$(date +"%Y-%m-%d %H:%M:%S")] [SETUP] $message" >> "$LOG_FILE"
+    echo "[INFO] $message"
 }
 
-echo "[작업] === RoArm MCP 환경 설정 시작 ==="
-log_message "환경 설정 시작"
+# --- Main Execution ---
 
-# 가상환경 생성
+echo "=== Starting RoArm MCP Environment Setup ==="
+log_message "Environment setup script started."
+
+# 1. Create the Python virtual environment if it doesn't exist.
 if [ ! -d "$VENV_DIR" ]; then
-    echo "[작업] Python 가상환경 생성 중..."
+    log_message "Creating Python virtual environment at: $VENV_DIR"
     python3 -m venv "$VENV_DIR"
-    log_message "가상환경 생성됨: $VENV_DIR"
-    echo "[작업] 가상환경이 생성되었습니다: $VENV_DIR"
+    if [ $? -ne 0 ]; then
+        echo "[ERROR] Failed to create virtual environment. Please ensure python3 and the 'venv' module are installed."
+        exit 1
+    fi
+    log_message "Virtual environment created successfully."
 else
-    echo "[작업] 가상환경이 이미 존재합니다: $VENV_DIR"
-    log_message "기존 가상환경 사용: $VENV_DIR"
+    log_message "Virtual environment already exists at: $VENV_DIR"
 fi
 
-# 가상환경 활성화
-echo "[작업] 가상환경 활성화 중..."
+# 2. Activate the virtual environment.
+log_message "Activating the virtual environment..."
 source "$VENV_DIR/bin/activate"
-log_message "가상환경 활성화됨"
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Failed to activate virtual environment."
+    exit 1
+fi
 
-# 필요한 패키지 설치
-echo "[작업] 필수 패키지 설치 중..."
-log_message "pip 및 기본 도구 업그레이드 시작"
+# 3. Install/upgrade required packages.
+log_message "Upgrading pip, setuptools, and wheel..."
 pip install --upgrade pip setuptools wheel
-log_message "프로젝트 의존성 설치 시작"
+log_message "Installing project dependencies from requirements.txt..."
 pip install -r "${PROJECT_ROOT}/requirements.txt"
-log_message "패키지 설치 완료"
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Failed to install dependencies from requirements.txt."
+    log_message "Error: Failed to install dependencies."
+    exit 1
+fi
+log_message "Python packages installed successfully."
 
-# dialout 그룹 확인 (하드웨어 통신을 위해)
+# 4. Check for 'dialout' group membership (for hardware communication).
 if ! groups | grep -q "dialout"; then
-    echo "[작업] 경고: 현재 사용자가 dialout 그룹에 속해있지 않습니다."
-    echo "[작업] 하드웨어 통신을 위해 다음 명령을 실행하세요:"
-    echo "[작업] sudo usermod -a -G dialout $USER"
-    echo "[작업] 명령 실행 후 재로그인이 필요합니다."
-    log_message "경고: dialout 그룹 권한 없음 - 하드웨어 통신에 필요"
+    echo ""
+    echo "[WARNING] User '$USER' is not in the 'dialout' group."
+    echo "          This permission is required for serial communication with the physical robot arm."
+    echo "          To add yourself to the group, run the following command:"
+    echo "          sudo usermod -a -G dialout $USER"
+    echo "          You will need to log out and log back in for the change to take effect."
+    log_message "Warning: User is not in the 'dialout' group, which is needed for hardware access."
 fi
 
 echo ""
-echo "[작업] === RoArm MCP 환경 설정 완료 ==="
-log_message "환경 설정 완료"
-echo "[작업] 가상환경을 활성화하려면: source ${VENV_DIR}/bin/activate"
-echo "[작업] MCP 서버를 실행하려면: bash ${PROJECT_ROOT}/scripts/run_mcp_server.sh"
+echo "=== RoArm MCP Environment Setup Complete ==="
+log_message "Environment setup finished successfully."
+echo "To activate the environment in your shell, run:"
+echo "  source ${VENV_DIR}/bin/activate"
+echo "To run the MCP server, you can use the helper script:"
+echo "  bash ${PROJECT_ROOT}/scripts/run_mcp_server.sh"

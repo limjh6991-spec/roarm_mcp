@@ -1,49 +1,80 @@
 #!/bin/bash
+#
+# A convenience script to set up the environment and run the MCP server.
+#
+# This script performs the following actions:
+#   1. Determines the project's root directory.
+#   2. Creates a log directory (`daily_log`) if it doesn't exist.
+#   3. Creates a daily log file with the current date.
+#   4. Checks for and activates the Python virtual environment (`.venv`).
+#   5. Starts the main MCP server using the `examples/run_server.py` script.
+#   6. Logs key actions to the daily log file.
+#
+# Usage:
+#   From the project root directory, simply run:
+#   ./scripts/run_mcp_server.sh [server_options]
+#
+# Example:
+#   ./scripts/run_mcp_server.sh --robot-type franka --headless
+#
 
-# 프로젝트 루트 디렉토리
+# --- Setup ---
+# Get the project root directory (the parent of the 'scripts' directory)
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="${PROJECT_ROOT}/.venv"
 LOG_DIR="${PROJECT_ROOT}/daily_log"
 TODAY=$(date +"%Y%m%d")
 LOG_FILE="${LOG_DIR}/${TODAY}.log"
 
-# 로그 디렉토리 생성 (없는 경우)
+# --- Functions ---
+
+# Function to add a message to the daily log file.
+log_message() {
+    local message="$1"
+    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    echo "[$timestamp] $message" >> "$LOG_FILE"
+    echo "[LOG] $message"
+}
+
+# --- Main Execution ---
+
+# 1. Ensure the log directory exists.
 if [ ! -d "$LOG_DIR" ]; then
-    echo "[작업] 로그 디렉토리 생성: $LOG_DIR"
+    echo "[INFO] Creating log directory: $LOG_DIR"
     mkdir -p "$LOG_DIR"
 fi
 
-# 로그 파일 생성 (없는 경우)
+# 2. Create a new log file for the day if it doesn't exist.
 if [ ! -f "$LOG_FILE" ]; then
-    echo "[작업] 새 로그 파일 생성: $LOG_FILE"
+    echo "[INFO] Creating new log file: $LOG_FILE"
     cat > "$LOG_FILE" << EOF
-# RoArm MCP 작업 로그
-# 날짜: $(date +"%Y년 %m월 %d일")
-# 작성자: RoArm M3
-
+# RoArm MCP Task Log
+# Date: $(date +"%Y-%m-%d")
+# Initiated by: run_mcp_server.sh
+#
 EOF
 fi
 
-# 로그 메시지 추가
-log_message() {
-    local message="$1"
-    local timestamp=$(date +"%H:%M:%S")
-    echo "[$(date +"%Y-%m-%d %H:%M:%S")] $message" >> "$LOG_FILE"
-    echo "[로그] $message"
-}
-
-# 가상환경 활성화 체크 및 활성화
+# 3. Check and activate the Python virtual environment if not already active.
 if [[ -z "$VIRTUAL_ENV" ]]; then
-    echo "[작업] 가상환경 활성화 중..."
-    source "$VENV_DIR/bin/activate"
-    log_message "가상환경 활성화됨"
+    if [ -f "$VENV_DIR/bin/activate" ]; then
+        echo "[INFO] Activating Python virtual environment..."
+        source "$VENV_DIR/bin/activate"
+        log_message "Virtual environment activated."
+    else
+        echo "[ERROR] Virtual environment not found at $VENV_DIR."
+        echo "[ERROR] Please run 'scripts/setup_env.sh' first."
+        exit 1
+    fi
 fi
 
-# MCP 서버 실행
-echo "[작업] MCP 서버 시작 중..."
+# 4. Run the main MCP server.
+# Any arguments passed to this script (e.g., --headless) will be forwarded to the server script.
+echo "[INFO] Starting the MCP server..."
 cd "$PROJECT_ROOT"
-log_message "서버 시작 명령 실행: python -m mcp_server.server"
-python -m mcp_server.server
+log_message "Executing server start command: python -m examples.run_server $@"
+python -m examples.run_server "$@"
 
-# 종료 시 로그 추가
-log_message "서버 종료"
+# 5. Log the server shutdown.
+log_message "Server process has been terminated."
+echo "[INFO] Server has shut down."

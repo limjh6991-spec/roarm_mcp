@@ -1,7 +1,24 @@
 #!/usr/bin/env python3
-"""
-Advanced test client for stability and error handling
-안정성 및 에러 처리 테스트용 고급 클라이언트
+"""An advanced client for server stability and error handling tests.
+
+This script provides a suite of tests designed to verify the stability,
+robustness, and error-handling capabilities of a WebSocket server, such as the
+`simple_isaac_sim_server.py` or a full `run_server.py` instance.
+
+It includes the following test scenarios:
+  1.  **Connection/Disconnection:** Repeatedly connects and disconnects to
+      ensure the server handles client churn gracefully.
+  2.  **Invalid Messages:** Sends various forms of malformed or invalid JSON
+      messages to test the server's parsing and error-handling logic.
+  3.  **Rapid Messages:** Sends a burst of messages in quick succession to
+      test the server's ability to handle high traffic without dropping
+      connections or blocking.
+  4.  **Long Connection:** Maintains a connection over an extended period,
+      sending periodic heartbeat messages to check for connection stability
+      and timeouts.
+
+Usage:
+    python -m examples.stability_test_client --server-url <ws_url>
 """
 
 import asyncio
@@ -9,168 +26,175 @@ import websockets
 import json
 import logging
 import time
-import random
+import argparse
+import traceback
 
-# Initialize logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class StabilityTestClient:
-    def __init__(self, server_url):
+    """A client to perform stability tests on a WebSocket server.
+
+    Attributes:
+        server_url (str): The WebSocket URL of the server to test.
+    """
+    def __init__(self, server_url: str):
+        """Initializes the stability test client.
+
+        Args:
+            server_url (str): The WebSocket URL of the server.
+        """
         self.server_url = server_url
         
     async def test_connection_disconnect(self):
-        """연결 해제 시나리오 테스트"""
-        logger.info("🔌 연결/해제 테스트 시작")
+        """Tests the server's ability to handle rapid connections and disconnections."""
+        logger.info("🔌 Starting connection/disconnection test...")
         
         for i in range(3):
             try:
                 async with websockets.connect(self.server_url) as websocket:
-                    logger.info(f"✅ 연결 {i+1}/3 성공")
-                    
-                    # 짧은 메시지 전송
+                    logger.info(f"✅ Connection {i+1}/3 successful.")
                     message = {"action": "ping", "test": f"connection_{i+1}"}
                     await websocket.send(json.dumps(message))
                     response = await websocket.recv()
-                    
-                    logger.info(f"📨 응답 수신: {json.loads(response)['status']}")
-                    await asyncio.sleep(1)
-                    
-                logger.info(f"🔌 연결 {i+1} 정상 종료")
-                    
+                    logger.info(f"📨 Received response with status: {json.loads(response).get('status')}")
+                    await asyncio.sleep(0.5)
+                logger.info(f"🔌 Connection {i+1} closed normally.")
             except Exception as e:
-                logger.error(f"❌ 연결 {i+1} 오류: {e}")
+                logger.error(f"❌ An error occurred during connection test {i+1}: {e}")
                 
     async def test_invalid_messages(self):
-        """잘못된 메시지 처리 테스트"""
-        logger.info("⚠️ 잘못된 메시지 테스트 시작")
+        """Tests the server's handling of malformed and invalid messages."""
+        logger.info("⚠️ Starting invalid message test...")
         
         invalid_messages = [
-            "invalid json",  # 잘못된 JSON
-            '{"incomplete": true',  # 불완전한 JSON
-            '{"empty": ""}',  # 빈 액션
-            '{"action": "unknown_command"}',  # 알 수 없는 명령
-            '{"action": null}',  # null 액션
+            "this is not json",          # Invalid JSON
+            '{"action": "test", "bad',   # Incomplete JSON
+            '{}',                        # Empty JSON object
+            '{"action": "unknown_cmd"}', # Unknown command
+            '{"action": null}',          # Null action
         ]
         
         try:
             async with websockets.connect(self.server_url) as websocket:
-                logger.info("✅ 서버 연결 성공")
-                
+                logger.info("✅ Connected to server for invalid message test.")
                 for i, invalid_msg in enumerate(invalid_messages, 1):
-                    logger.info(f"📤 잘못된 메시지 {i}/5 전송: {invalid_msg[:30]}...")
-                    
+                    logger.info(f"📤 Sending invalid message {i}/{len(invalid_messages)}: {invalid_msg[:40]}...")
                     try:
                         await websocket.send(invalid_msg)
                         response = await websocket.recv()
                         data = json.loads(response)
-                        logger.info(f"📨 서버 응답: {data.get('status', 'unknown')}")
+                        logger.info(f"📨 Server responded with status: '{data.get('status', 'unknown')}'")
                     except Exception as e:
-                        logger.warning(f"⚠️ 메시지 {i} 처리 오류: {e}")
-                        
+                        logger.warning(f"⚠️ An error occurred while processing message {i}: {e}")
                     await asyncio.sleep(0.5)
-                    
         except Exception as e:
-            logger.error(f"❌ 잘못된 메시지 테스트 오류: {e}")
+            logger.error(f"❌ Failed to run invalid message test: {e}")
             
-    async def test_rapid_messages(self):
-        """빠른 연속 메시지 테스트"""
-        logger.info("🚀 빠른 연속 메시지 테스트 시작")
+    async def test_rapid_messages(self, count: int = 50):
+        """Tests the server's performance under a high message load.
+
+        Args:
+            count (int): The number of messages to send in a burst.
+        """
+        logger.info(f"🚀 Starting rapid message test ({count} messages)...")
         
         try:
             async with websockets.connect(self.server_url) as websocket:
-                logger.info("✅ 서버 연결 성공")
+                logger.info("✅ Connected to server for rapid message test.")
                 
-                # 20개 메시지 빠르게 전송
-                for i in range(20):
-                    message = {
-                        "action": "rapid_test",
-                        "sequence": i + 1,
-                        "timestamp": time.time()
-                    }
-                    
+                # Send a burst of messages
+                for i in range(count):
+                    message = {"action": "rapid_test", "sequence": i + 1, "timestamp": time.time()}
                     await websocket.send(json.dumps(message))
-                    
-                    # 10개마다 응답 확인
-                    if (i + 1) % 10 == 0:
-                        logger.info(f"📤 {i+1}/20 메시지 전송 완료")
-                        
-                        # 응답 수집
-                        for _ in range(10):
-                            try:
-                                response = await asyncio.wait_for(websocket.recv(), timeout=1.0)
-                                data = json.loads(response)
-                                if data.get('status') != 'success':
-                                    logger.warning(f"⚠️ 비정상 응답: {data}")
-                            except asyncio.TimeoutError:
-                                logger.warning(f"⚠️ 응답 시간 초과")
-                                break
-                                
-                        logger.info(f"✅ {i+1}번째까지 처리 완료")
+                logger.info(f"📤 All {count} messages sent.")
+
+                # Try to receive all responses
+                responses_received = 0
+                try:
+                    for _ in range(count):
+                        await asyncio.wait_for(websocket.recv(), timeout=2.0)
+                        responses_received += 1
+                    logger.info(f"✅ Received all {responses_received}/{count} responses.")
+                except asyncio.TimeoutError:
+                    logger.warning(f"⚠️ Timed out after receiving {responses_received}/{count} responses.")
                         
         except Exception as e:
-            logger.error(f"❌ 빠른 메시지 테스트 오류: {e}")
+            logger.error(f"❌ An error occurred during rapid message test: {e}", exc_info=True)
             
-    async def test_long_connection(self):
-        """장시간 연결 테스트"""
-        logger.info("⏱️ 장시간 연결 테스트 시작 (30초)")
+    async def test_long_connection(self, duration_sec: int = 20):
+        """Tests the server's ability to maintain a long-lived connection.
+
+        Args:
+            duration_sec (int): The duration of the test in seconds.
+        """
+        logger.info(f"⏱️ Starting long connection test ({duration_sec} seconds)...")
         
         try:
-            async with websockets.connect(self.server_url) as websocket:
-                logger.info("✅ 장시간 연결 시작")
-                
+            async with websockets.connect(self.server_url, ping_interval=5, ping_timeout=5) as websocket:
+                logger.info("✅ Connection established for long duration test.")
                 start_time = time.time()
                 message_count = 0
                 
-                while time.time() - start_time < 30:  # 30초 동안
-                    message = {
-                        "action": "heartbeat",
-                        "timestamp": time.time(),
-                        "uptime": time.time() - start_time
-                    }
-                    
+                while time.time() - start_time < duration_sec:
+                    message = {"action": "heartbeat", "timestamp": time.time()}
                     await websocket.send(json.dumps(message))
-                    response = await websocket.recv()
-                    
+                    await websocket.recv()
                     message_count += 1
                     
                     if message_count % 5 == 0:
-                        logger.info(f"💗 하트비트 {message_count}개 전송 (경과: {time.time() - start_time:.1f}초)")
-                        
-                    await asyncio.sleep(2)  # 2초마다
+                        logger.info(f"💗 Heartbeat #{message_count} successful.")
+                    await asyncio.sleep(1)
                     
-                logger.info(f"✅ 장시간 연결 테스트 완료: {message_count}개 메시지, {time.time() - start_time:.1f}초")
+                logger.info(f"✅ Long connection test complete. Sent {message_count} messages over {time.time() - start_time:.1f}s.")
                 
         except Exception as e:
-            logger.error(f"❌ 장시간 연결 테스트 오류: {e}")
+            logger.error(f"❌ An error occurred during the long connection test: {e}", exc_info=True)
 
     async def run_all_tests(self):
-        """모든 테스트 실행"""
-        logger.info("🧪 === 종합 안정성 테스트 시작 ===")
+        """Runs the complete suite of stability tests."""
+        logger.info("🧪 === Starting Full Stability Test Suite ===")
         
         tests = [
-            ("연결/해제 테스트", self.test_connection_disconnect),
-            ("잘못된 메시지 테스트", self.test_invalid_messages),
-            ("빠른 연속 메시지 테스트", self.test_rapid_messages),
-            ("장시간 연결 테스트", self.test_long_connection),
+            ("Connection/Disconnection", self.test_connection_disconnect),
+            ("Invalid Messages", self.test_invalid_messages),
+            ("Rapid Messages", self.test_rapid_messages),
+            ("Long Connection", self.test_long_connection),
         ]
         
-        for test_name, test_func in tests:
-            logger.info(f"\n🔬 {test_name} 실행 중...")
+        for name, test_func in tests:
+            logger.info(f"\n🔬 --- Running: {name} ---")
             try:
                 await test_func()
-                logger.info(f"✅ {test_name} 완료")
+                logger.info(f"✅ --- Finished: {name} ---")
             except Exception as e:
-                logger.error(f"❌ {test_name} 실패: {e}")
+                logger.error(f"❌ --- Test Failed: {name} ---")
+                logger.error(traceback.format_exc())
             
-            await asyncio.sleep(2)  # 테스트 간 대기
+            await asyncio.sleep(2)
             
-        logger.info("\n🎉 === 모든 안정성 테스트 완료 ===")
+        logger.info("\n🎉 === All Stability Tests Complete ===")
 
 async def main():
-    """메인 함수"""
-    client = StabilityTestClient("ws://localhost:8765")
+    """Parses arguments and runs the test suite."""
+    parser = argparse.ArgumentParser(
+        description="Run stability tests against an MCP server.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        "--server-url",
+        type=str,
+        default="ws://localhost:8765",
+        help="The WebSocket URL of the server to test."
+    )
+    args = parser.parse_args()
+
+    client = StabilityTestClient(args.server_url)
     await client.run_all_tests()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Test suite interrupted by user.")

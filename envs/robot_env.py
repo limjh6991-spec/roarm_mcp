@@ -1,12 +1,13 @@
-"""
-Environments for RoArm MCP.
+"""Reinforcement learning environments for RoArm MCP.
 
-This module provides reinforcement learning environments for robot arm control.
+This module provides `gymnasium.Env`-style environments for controlling robot
+arms in the Isaac Sim simulator. It includes a base class `RobotArmEnv` and
+concrete implementations for different control tasks, such as joint position
+control and end-effector position control.
 """
 
 import logging
-import gym
-import gymnasium
+import gymnasium as gym
 import numpy as np
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -20,164 +21,143 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class RobotArmEnv:
-    """Base class for robot arm environments."""
+class RobotArmEnv(gym.Env):
+    """Abstract base class for robot arm reinforcement learning environments.
+
+    This class defines the common interface for all robot arm environments,
+    including methods for resetting, stepping, rendering, and closing the
+    environment. It also provides helper methods for converting `gymnasium.spaces`
+    to the serializable `MCPSpace` format for communication over the MCP protocol.
+
+    Attributes:
+        observation_space (Optional[gym.Space]): The observation space.
+        action_space (Optional[gym.Space]): The action space.
+    """
     
     def __init__(self):
-        """Initialize the robot arm environment."""
+        """Initializes the robot arm environment."""
+        super().__init__()
         self.observation_space = None
         self.action_space = None
         
-    def reset(self) -> np.ndarray:
-        """Reset the environment.
-        
+    def reset(self, *, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
+        """Resets the environment to an initial state.
+
+        Args:
+            seed (Optional[int]): The seed that is used to initialize the
+                environment's random number generator.
+            options (Optional[Dict[str, Any]]): Additional options for resetting
+                the environment.
+
         Returns:
-            The initial observation.
+            Tuple[np.ndarray, Dict[str, Any]]: A tuple containing the initial
+            observation and an info dictionary.
+
+        Raises:
+            NotImplementedError: If the method is not implemented by a subclass.
         """
+        super().reset(seed=seed)
         raise NotImplementedError
         
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
-        """Take a step in the environment.
-        
+        """Runs one timestep of the environment's dynamics.
+
         Args:
-            action: The action to take.
-            
+            action (np.ndarray): An action provided by the agent.
+
         Returns:
-            A tuple of (observation, reward, terminated, truncated, info).
+            Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]: A tuple of
+            (observation, reward, terminated, truncated, info).
+
+        Raises:
+            NotImplementedError: If the method is not implemented by a subclass.
         """
         raise NotImplementedError
         
     def render(self) -> None:
-        """Render the environment."""
+        """Renders the environment.
+        
+        Raises:
+            NotImplementedError: If the method is not implemented by a subclass.
+        """
         raise NotImplementedError
         
     def close(self) -> None:
-        """Close the environment."""
+        """Performs any necessary cleanup.
+        
+        Raises:
+            NotImplementedError: If the method is not implemented by a subclass.
+        """
         raise NotImplementedError
-        
-    def get_action_space(self) -> MCPSpace:
-        """Get the action space.
-        
-        Returns:
-            The action space.
-        """
-        if isinstance(self.action_space, gymnasium.spaces.Box):
-            return MCPSpace(
-                type=SpaceType.BOX,
-                shape=list(self.action_space.shape),
-                low=self.action_space.low.tolist(),
-                high=self.action_space.high.tolist()
-            )
-        elif isinstance(self.action_space, gymnasium.spaces.Discrete):
-            return MCPSpace(
-                type=SpaceType.DISCRETE,
-                n=self.action_space.n
-            )
-        elif isinstance(self.action_space, gymnasium.spaces.MultiDiscrete):
-            return MCPSpace(
-                type=SpaceType.MULTI_DISCRETE,
-                nvec=self.action_space.nvec.tolist()
-            )
-        elif isinstance(self.action_space, gymnasium.spaces.MultiBinary):
-            return MCPSpace(
-                type=SpaceType.MULTI_BINARY,
-                shape=list(self.action_space.shape)
-            )
-        elif isinstance(self.action_space, gymnasium.spaces.Dict):
-            spaces = {}
-            for key, space in self.action_space.spaces.items():
-                spaces[key] = self.get_space(space)
-            return MCPSpace(
-                type=SpaceType.DICT,
-                spaces=spaces
-            )
-        else:
-            raise ValueError(f"Unsupported action space type: {type(self.action_space)}")
-        
-    def get_observation_space(self) -> MCPSpace:
-        """Get the observation space.
-        
-        Returns:
-            The observation space.
-        """
-        if isinstance(self.observation_space, gymnasium.spaces.Box):
-            return MCPSpace(
-                type=SpaceType.BOX,
-                shape=list(self.observation_space.shape),
-                low=self.observation_space.low.tolist(),
-                high=self.observation_space.high.tolist()
-            )
-        elif isinstance(self.observation_space, gymnasium.spaces.Discrete):
-            return MCPSpace(
-                type=SpaceType.DISCRETE,
-                n=self.observation_space.n
-            )
-        elif isinstance(self.observation_space, gymnasium.spaces.MultiDiscrete):
-            return MCPSpace(
-                type=SpaceType.MULTI_DISCRETE,
-                nvec=self.observation_space.nvec.tolist()
-            )
-        elif isinstance(self.observation_space, gymnasium.spaces.MultiBinary):
-            return MCPSpace(
-                type=SpaceType.MULTI_BINARY,
-                shape=list(self.observation_space.shape)
-            )
-        elif isinstance(self.observation_space, gymnasium.spaces.Dict):
-            spaces = {}
-            for key, space in self.observation_space.spaces.items():
-                spaces[key] = self.get_space(space)
-            return MCPSpace(
-                type=SpaceType.DICT,
-                spaces=spaces
-            )
-        else:
-            raise ValueError(f"Unsupported observation space type: {type(self.observation_space)}")
-    
-    def get_space(self, space: gymnasium.spaces.Space) -> MCPSpace:
-        """Convert a gym.Space to an MCPSpace.
-        
+
+    def _gym_space_to_mcp_space(self, space: gym.Space) -> MCPSpace:
+        """Converts a `gymnasium.spaces.Space` object to an `MCPSpace` object.
+
+        This is a helper function to serialize space definitions for the MCP protocol.
+
         Args:
-            space: The gym.Space to convert.
-            
+            space (gym.Space): The Gymnasium space to convert.
+
         Returns:
-            The converted MCPSpace.
+            MCPSpace: The serializable MCPSpace representation.
+
+        Raises:
+            ValueError: If the space type is not supported.
         """
-        if isinstance(space, gymnasium.spaces.Box):
+        if isinstance(space, gym.spaces.Box):
             return MCPSpace(
                 type=SpaceType.BOX,
                 shape=list(space.shape),
-                low=space.low.tolist(),
-                high=space.high.tolist()
+                low=space.low,
+                high=space.high
             )
-        elif isinstance(space, gymnasium.spaces.Discrete):
-            return MCPSpace(
-                type=SpaceType.DISCRETE,
-                n=space.n
-            )
-        elif isinstance(space, gymnasium.spaces.MultiDiscrete):
-            return MCPSpace(
-                type=SpaceType.MULTI_DISCRETE,
-                nvec=space.nvec.tolist()
-            )
-        elif isinstance(space, gymnasium.spaces.MultiBinary):
-            return MCPSpace(
-                type=SpaceType.MULTI_BINARY,
-                shape=list(space.shape)
-            )
-        elif isinstance(space, gymnasium.spaces.Dict):
-            spaces = {}
-            for key, sub_space in space.spaces.items():
-                spaces[key] = self.get_space(sub_space)
+        elif isinstance(space, gym.spaces.Discrete):
+            return MCPSpace(type=SpaceType.DISCRETE, n=space.n)
+        elif isinstance(space, gym.spaces.MultiDiscrete):
+            return MCPSpace(type=SpaceType.MULTI_DISCRETE, nvec=space.nvec)
+        elif isinstance(space, gym.spaces.MultiBinary):
+            return MCPSpace(type=SpaceType.MULTI_BINARY, shape=list(space.shape))
+        elif isinstance(space, gym.spaces.Dict):
             return MCPSpace(
                 type=SpaceType.DICT,
-                spaces=spaces
+                spaces={k: self._gym_space_to_mcp_space(v) for k, v in space.spaces.items()}
             )
         else:
             raise ValueError(f"Unsupported space type: {type(space)}")
 
+    def get_action_space(self) -> MCPSpace:
+        """Gets the serializable action space of the environment.
+
+        Returns:
+            MCPSpace: The `MCPSpace` representation of the action space.
+        """
+        return self._gym_space_to_mcp_space(self.action_space)
+        
+    def get_observation_space(self) -> MCPSpace:
+        """Gets the serializable observation space of the environment.
+
+        Returns:
+            MCPSpace: The `MCPSpace` representation of the observation space.
+        """
+        return self._gym_space_to_mcp_space(self.observation_space)
+
 
 class JointPositionEnv(RobotArmEnv):
-    """Environment for joint position control."""
+    """An environment for joint-space position control.
+
+    In this environment, the agent's task is to provide target joint positions
+    to move the robot arm to a randomly sampled target joint configuration.
+
+    Attributes:
+        robot_env (IsaacSimRobotEnv): The underlying Isaac Sim environment.
+        robot (Union[UR10Robot, FrankaRobot]): The robot instance.
+        num_joints (int): The number of joints in the robot arm.
+        joint_limits (Dict[str, np.ndarray]): The robot's joint limits.
+        target_position (np.ndarray): The target joint configuration for the
+            current episode.
+        steps (int): The number of steps taken in the current episode.
+        max_steps (int): The maximum number of steps per episode.
+    """
     
     def __init__(
         self,
@@ -185,21 +165,20 @@ class JointPositionEnv(RobotArmEnv):
         headless: bool = False,
         time_step: float = 1.0 / 60.0
     ):
-        """Initialize the joint position control environment.
-        
+        """Initializes the joint position control environment.
+
         Args:
-            robot_type: The type of robot to use ("ur10" or "franka").
-            headless: Whether to run in headless mode.
-            time_step: The simulation time step.
+            robot_type (str): The type of robot to use ("ur10" or "franka").
+                Defaults to "ur10".
+            headless (bool): Whether to run Isaac Sim in headless mode.
+                Defaults to False.
+            time_step (float): The simulation time step. Defaults to 1.0/60.0.
         """
         super().__init__()
         
         # Create robot environment
         self.robot_env = IsaacSimRobotEnv(
-            robot_usd_path=f"/Isaac/Robots/{robot_type.upper()}/{robot_type.lower()}.usd",
-            robot_name=robot_type.lower(),
             headless=headless,
-            time_step=time_step
         )
         
         # Create robot
@@ -216,156 +195,87 @@ class JointPositionEnv(RobotArmEnv):
         self.joint_limits = self.robot.get_joint_limits()
         
         # Define action and observation spaces
-        self.action_space = gymnasium.spaces.Box(
+        self.action_space = gym.spaces.Box(
             low=self.joint_limits["lower"],
             high=self.joint_limits["upper"],
             dtype=np.float32
         )
         
-        # Observation space includes joint positions, velocities, and target position
-        self.observation_space = gymnasium.spaces.Dict({
-            "joint_positions": gymnasium.spaces.Box(
-                low=self.joint_limits["lower"],
-                high=self.joint_limits["upper"],
-                dtype=np.float32
-            ),
-            "joint_velocities": gymnasium.spaces.Box(
-                low=-np.ones(self.num_joints) * 10.0,
-                high=np.ones(self.num_joints) * 10.0,
-                dtype=np.float32
-            ),
-            "target_position": gymnasium.spaces.Box(
-                low=self.joint_limits["lower"],
-                high=self.joint_limits["upper"],
-                dtype=np.float32
-            )
-        })
-        
+        obs_low = np.concatenate([self.joint_limits["lower"], -np.ones(self.num_joints) * 10.0])
+        obs_high = np.concatenate([self.joint_limits["upper"], np.ones(self.num_joints) * 10.0])
+        self.observation_space = gym.spaces.Box(low=obs_low, high=obs_high, dtype=np.float32)
+
         # Initialize state
         self.target_position = self.robot.get_home_position()
         self.steps = 0
         self.max_steps = 1000
         
-    def reset(self) -> np.ndarray:
-        """Reset the environment.
-        
-        Returns:
-            The initial observation.
-        """
-        # Reset simulation
+    def reset(self, *, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
+        """Resets the environment for a new episode."""
+        super().reset(seed=seed)
         self.robot_env.reset()
-        
-        # Move robot to home position
         self.robot.move_to_home()
-        
-        # Set random target position
-        self.target_position = self.sample_target_position()
-        
-        # Reset steps
+        self.target_position = self.action_space.sample()
         self.steps = 0
         
-        # Get observation
-        return self._get_observation()
+        observation = self._get_observation()
+        info = {"target_position": self.target_position}
+        return observation, info
         
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
-        """Take a step in the environment.
-        
-        Args:
-            action: The action to take (target joint position).
-            
-        Returns:
-            A tuple of (observation, reward, terminated, truncated, info).
-        """
-        # Clip action to joint limits
-        action = np.clip(action, self.joint_limits["lower"], self.joint_limits["upper"])
-        
-        # Set joint positions
+        """Takes a step in the environment."""
+        action = np.clip(action, self.action_space.low, self.action_space.high)
         self.robot.controller.move_to_joint_positions(action)
-        
-        # Step simulation
         self.robot_env.step()
-        
-        # Increment steps
         self.steps += 1
         
-        # Get observation
         observation = self._get_observation()
-        
-        # Calculate reward
-        reward = self._calculate_reward(action)
-        
-        # Check if done
-        terminated = False
+        reward = self._calculate_reward()
+        terminated = np.linalg.norm(self.target_position - observation[:self.num_joints]) < 0.05
         truncated = self.steps >= self.max_steps
-        
-        # Info
-        info = {
-            "steps": self.steps,
-            "target_position": self.target_position.tolist()
-        }
+        info = {"target_position": self.target_position}
         
         return observation, reward, terminated, truncated, info
         
     def render(self) -> None:
-        """Render the environment."""
+        """Renders the environment."""
         self.robot_env.render()
         
     def close(self) -> None:
-        """Close the environment."""
+        """Closes the environment."""
         self.robot_env.close()
         
-    def _get_observation(self) -> Dict[str, np.ndarray]:
-        """Get the current observation.
-        
-        Returns:
-            The current observation.
-        """
+    def _get_observation(self) -> np.ndarray:
+        """Gets the current observation."""
         joint_positions = self.robot.controller.get_joint_positions()
         joint_velocities = self.robot.controller.get_joint_velocities()
+        return np.concatenate([joint_positions, joint_velocities])
         
-        return {
-            "joint_positions": joint_positions,
-            "joint_velocities": joint_velocities,
-            "target_position": self.target_position
-        }
-        
-    def _calculate_reward(self, action: np.ndarray) -> float:
-        """Calculate the reward.
-        
-        Args:
-            action: The action taken.
-            
-        Returns:
-            The reward.
-        """
-        # Get current joint positions
+    def _calculate_reward(self) -> float:
+        """Calculates the reward."""
         joint_positions = self.robot.controller.get_joint_positions()
-        
-        # Calculate position error
         position_error = np.linalg.norm(self.target_position - joint_positions)
-        
-        # Calculate action magnitude (for penalizing large actions)
-        action_magnitude = np.linalg.norm(action)
-        
-        # Reward for reaching target (negative error) and penalty for large actions
-        reward = -position_error - 0.01 * action_magnitude
-        
-        return reward
-        
-    def sample_target_position(self) -> np.ndarray:
-        """Sample a random target position.
-        
-        Returns:
-            The sampled target position.
-        """
-        return np.random.uniform(
-            self.joint_limits["lower"],
-            self.joint_limits["upper"]
-        )
+        return -position_error
 
 
 class EndEffectorPositionEnv(RobotArmEnv):
-    """Environment for end-effector position control."""
+    """An environment for task-space position control.
+
+    In this environment, the agent's task is to provide target joint positions
+    to move the robot's end-effector to a randomly sampled Cartesian coordinate.
+
+    Note: This environment requires a robust inverse kinematics (IK) solver,
+    which is currently a placeholder.
+
+    Attributes:
+        robot_env (IsaacSimRobotEnv): The underlying Isaac Sim environment.
+        robot (Union[UR10Robot, FrankaRobot]): The robot instance.
+        num_joints (int): The number of joints in the robot arm.
+        target_position (np.ndarray): The target end-effector position for the
+            current episode.
+        steps (int): The number of steps taken in the current episode.
+        max_steps (int): The maximum number of steps per episode.
+    """
     
     def __init__(
         self,
@@ -373,24 +283,19 @@ class EndEffectorPositionEnv(RobotArmEnv):
         headless: bool = False,
         time_step: float = 1.0 / 60.0
     ):
-        """Initialize the end-effector position control environment.
-        
+        """Initializes the end-effector position control environment.
+
         Args:
-            robot_type: The type of robot to use ("ur10" or "franka").
-            headless: Whether to run in headless mode.
-            time_step: The simulation time step.
+            robot_type (str): The type of robot to use ("ur10" or "franka").
+                Defaults to "ur10".
+            headless (bool): Whether to run Isaac Sim in headless mode.
+                Defaults to False.
+            time_step (float): The simulation time step. Defaults to 1.0/60.0.
         """
         super().__init__()
         
-        # Create robot environment
-        self.robot_env = IsaacSimRobotEnv(
-            robot_usd_path=f"/Isaac/Robots/{robot_type.upper()}/{robot_type.lower()}.usd",
-            robot_name=robot_type.lower(),
-            headless=headless,
-            time_step=time_step
-        )
+        self.robot_env = IsaacSimRobotEnv(headless=headless)
         
-        # Create robot
         if robot_type.lower() == "ur10":
             self.robot = UR10Robot(robot_env=self.robot_env)
             self.num_joints = 6
@@ -400,171 +305,73 @@ class EndEffectorPositionEnv(RobotArmEnv):
         else:
             raise ValueError(f"Unsupported robot type: {robot_type}")
         
-        # Get joint limits
-        self.joint_limits = self.robot.get_joint_limits()
-        
-        # Define action space (3D position delta)
-        self.action_space = gymnasium.spaces.Box(
-            low=-0.1 * np.ones(3),  # 10 cm per step in each direction
-            high=0.1 * np.ones(3),
+        # Action space is target joint positions
+        self.action_space = gym.spaces.Box(
+            low=self.robot.get_joint_limits()["lower"],
+            high=self.robot.get_joint_limits()["upper"],
             dtype=np.float32
         )
         
-        # Define observation space
-        self.observation_space = gymnasium.spaces.Dict({
-            "joint_positions": gymnasium.spaces.Box(
-                low=self.joint_limits["lower"],
-                high=self.joint_limits["upper"],
-                dtype=np.float32
-            ),
-            "joint_velocities": gymnasium.spaces.Box(
-                low=-np.ones(self.num_joints) * 10.0,
-                high=np.ones(self.num_joints) * 10.0,
-                dtype=np.float32
-            ),
-            "end_effector_position": gymnasium.spaces.Box(
-                low=-np.ones(3) * 2.0,  # 2m in each direction
-                high=np.ones(3) * 2.0,
-                dtype=np.float32
-            ),
-            "target_position": gymnasium.spaces.Box(
-                low=-np.ones(3) * 2.0,
-                high=np.ones(3) * 2.0,
-                dtype=np.float32
-            )
+        # Observation space
+        self.observation_space = gym.spaces.Dict({
+            "joint_positions": gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.num_joints,), dtype=np.float32),
+            "end_effector_position": gym.spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float32),
+            "target_position": gym.spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float32),
         })
         
-        # Initialize state
-        self.target_position = np.array([0.5, 0.0, 0.5])  # Default target position
+        self.target_position = np.array([0.5, 0.0, 0.5])
         self.steps = 0
         self.max_steps = 1000
         
-    def reset(self) -> Dict[str, np.ndarray]:
-        """Reset the environment.
-        
-        Returns:
-            The initial observation.
-        """
-        # Reset simulation
+    def reset(self, *, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, np.ndarray], Dict[str, Any]]:
+        """Resets the environment for a new episode."""
+        super().reset(seed=seed)
         self.robot_env.reset()
-        
-        # Move robot to home position
         self.robot.move_to_home()
-        
-        # Set random target position
-        self.target_position = self.sample_target_position()
-        
-        # Reset steps
+        self.target_position = self.observation_space["target_position"].sample()
         self.steps = 0
         
-        # Get observation
-        return self._get_observation()
+        observation = self._get_observation()
+        info = {"target_position": self.target_position}
+        return observation, info
         
     def step(self, action: np.ndarray) -> Tuple[Dict[str, np.ndarray], float, bool, bool, Dict[str, Any]]:
-        """Take a step in the environment.
-        
-        Args:
-            action: The action to take (delta end-effector position).
-            
-        Returns:
-            A tuple of (observation, reward, terminated, truncated, info).
-        """
-        # Get current end-effector position
-        current_position = self.robot_env.get_end_effector_position()
-        
-        # Calculate target end-effector position
-        target_position = current_position + action
-        
-        # Move to target position (this would require inverse kinematics in a real implementation)
-        # For now, this is a placeholder
-        # In a real implementation, you would:
-        # 1. Use inverse kinematics to convert target end-effector position to joint positions
-        # 2. Use the controller to move to those joint positions
-        
-        # Step simulation
+        """Takes a step in the environment."""
+        # Here, the action is the target joint positions.
+        # A more advanced agent would use an IK solver to find the joint positions
+        # that lead to a desired end-effector position.
+        action = np.clip(action, self.action_space.low, self.action_space.high)
+        self.robot.controller.move_to_joint_positions(action)
         self.robot_env.step()
-        
-        # Increment steps
         self.steps += 1
         
-        # Get observation
         observation = self._get_observation()
-        
-        # Calculate reward
-        reward = self._calculate_reward(action)
-        
-        # Check if done
-        position_error = np.linalg.norm(self.target_position - self.robot_env.get_end_effector_position())
-        terminated = position_error < 0.01  # 1 cm tolerance
+        reward = self._calculate_reward()
+        position_error = np.linalg.norm(self.target_position - observation["end_effector_position"])
+        terminated = position_error < 0.02
         truncated = self.steps >= self.max_steps
-        
-        # Info
-        info = {
-            "steps": self.steps,
-            "target_position": self.target_position.tolist(),
-            "position_error": float(position_error)
-        }
+        info = {"target_position": self.target_position, "position_error": position_error}
         
         return observation, reward, terminated, truncated, info
         
     def render(self) -> None:
-        """Render the environment."""
+        """Renders the environment."""
         self.robot_env.render()
         
     def close(self) -> None:
-        """Close the environment."""
+        """Closes the environment."""
         self.robot_env.close()
         
     def _get_observation(self) -> Dict[str, np.ndarray]:
-        """Get the current observation.
-        
-        Returns:
-            The current observation.
-        """
-        joint_positions = self.robot.controller.get_joint_positions()
-        joint_velocities = self.robot.controller.get_joint_velocities()
-        end_effector_position = self.robot_env.get_end_effector_position()
-        
+        """Gets the current observation."""
         return {
-            "joint_positions": joint_positions,
-            "joint_velocities": joint_velocities,
-            "end_effector_position": end_effector_position,
-            "target_position": self.target_position
+            "joint_positions": self.robot.controller.get_joint_positions(),
+            "end_effector_position": self.robot_env.get_end_effector_position(),
+            "target_position": self.target_position,
         }
         
-    def _calculate_reward(self, action: np.ndarray) -> float:
-        """Calculate the reward.
-        
-        Args:
-            action: The action taken.
-            
-        Returns:
-            The reward.
-        """
-        # Get current end-effector position
-        end_effector_position = self.robot_env.get_end_effector_position()
-        
-        # Calculate position error
-        position_error = np.linalg.norm(self.target_position - end_effector_position)
-        
-        # Calculate action magnitude (for penalizing large actions)
-        action_magnitude = np.linalg.norm(action)
-        
-        # Reward for reaching target (negative error) and penalty for large actions
-        reward = -position_error - 0.1 * action_magnitude
-        
-        return reward
-        
-    def sample_target_position(self) -> np.ndarray:
-        """Sample a random target position within the robot's workspace.
-        
-        Returns:
-            The sampled target position.
-        """
-        # This would depend on the specific robot and its workspace
-        # For now, we'll use a simple heuristic
-        return np.array([
-            np.random.uniform(0.3, 0.7),    # x: 30-70 cm in front of the robot
-            np.random.uniform(-0.5, 0.5),   # y: 50 cm to the left and right
-            np.random.uniform(0.2, 0.8)     # z: 20-80 cm above the table
-        ])
+    def _calculate_reward(self) -> float:
+        """Calculates the reward."""
+        end_effector_pos = self.robot_env.get_end_effector_position()
+        position_error = np.linalg.norm(self.target_position - end_effector_pos)
+        return -position_error

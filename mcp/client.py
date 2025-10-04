@@ -1,7 +1,8 @@
-"""
-MCP client implementation for RoArm.
+"""MCP client implementation for RoArm.
 
-This module provides the client implementation for the Model Context Protocol.
+This module provides the client-side implementation for the Model Context Protocol
+(MCP). The `MCPClient` class acts as a `gymnasium.Env`, allowing an agent to
+interact with a remote robot environment managed by an `MCPServer`.
 """
 
 import asyncio
@@ -29,17 +30,37 @@ logger = logging.getLogger(__name__)
 
 
 class MCPClient(gym.Env):
-    """Model Context Protocol client for robot arm control."""
+    """A Gymnasium environment client for the Model Context Protocol.
+
+    This class provides a standard `gym.Env` interface for interacting with a
+    remote environment via WebSockets. It handles the connection to the
+    `MCPServer`, message serialization/deserialization, and the asynchronous
+    communication flow, presenting it synchronously to the agent.
+
+    Attributes:
+        host (str): The hostname or IP address of the MCPServer.
+        port (int): The port number of the MCPServer.
+        timeout (float): The timeout in seconds for WebSocket operations.
+        websocket (Optional[websockets.WebSocketClientProtocol]): The active
+            WebSocket connection instance.
+        action_space (Optional[gym.Space]): The action space of the remote
+            environment.
+        observation_space (Optional[gym.Space]): The observation space of the
+            remote environment.
+        connected (bool): A flag indicating if the client is connected.
+        loop (Optional[asyncio.AbstractEventLoop]): The asyncio event loop used
+            for running async operations.
+    """
 
     metadata = {"render_modes": ["human"]}
 
     def __init__(self, host: str = "localhost", port: int = 8765, timeout: float = 10.0):
-        """Initialize the MCP client.
-        
+        """Initializes the MCPClient.
+
         Args:
-            host: The host to connect to.
-            port: The port to connect to.
-            timeout: The timeout for operations in seconds.
+            host (str): The host to connect to. Defaults to "localhost".
+            port (int): The port to connect to. Defaults to 8765.
+            timeout (float): The timeout for operations in seconds. Defaults to 10.0.
         """
         super().__init__()
         
@@ -53,7 +74,14 @@ class MCPClient(gym.Env):
         self.loop = None
 
     async def _connect(self) -> None:
-        """Connect to the MCP server."""
+        """Establishes a WebSocket connection to the MCP server.
+
+        This private method connects to the server, retrieves the action and
+        observation spaces, and sets the `connected` flag.
+
+        Raises:
+            Exception: If the connection to the server fails.
+        """
         if self.connected:
             return
             
@@ -73,7 +101,7 @@ class MCPClient(gym.Env):
             raise
 
     async def _get_spaces(self) -> None:
-        """Get the action and observation spaces."""
+        """Retrieves action and observation spaces from the server."""
         if not self.connected:
             await self._connect()
         
@@ -92,13 +120,17 @@ class MCPClient(gym.Env):
         self.observation_space = self._parse_space(data["space"])
 
     def _parse_space(self, space_dict: Dict[str, Any]) -> gym.Space:
-        """Parse a space dictionary into a gym.Space.
-        
+        """Parses a space dictionary from the server into a `gym.Space` object.
+
         Args:
-            space_dict: The space dictionary to parse.
-            
+            space_dict (Dict[str, Any]): A dictionary describing the space,
+                received from the server.
+
         Returns:
-            The parsed gym.Space.
+            gym.Space: The corresponding `gymnasium.spaces` object.
+
+        Raises:
+            ValueError: If the space type specified in the dictionary is unknown.
         """
         space_type = SpaceType(space_dict["type"])
         
@@ -121,14 +153,19 @@ class MCPClient(gym.Env):
             raise ValueError(f"Unknown space type: {space_type}")
 
     def reset(self, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None) -> Tuple[Any, Dict[str, Any]]:
-        """Reset the environment.
-        
+        """Resets the remote environment.
+
+        This method sends a 'RESET' message to the server and waits for the
+        initial observation.
+
         Args:
-            seed: Random seed.
-            options: Reset options.
-            
+            seed (Optional[int]): The random seed for the environment.
+            options (Optional[Dict[str, Any]]): Additional options for resetting
+                the environment.
+
         Returns:
-            A tuple of (observation, info).
+            Tuple[Any, Dict[str, Any]]: A tuple containing the initial
+            observation and an empty info dictionary.
         """
         if seed is not None:
             super().reset(seed=seed)
@@ -140,10 +177,11 @@ class MCPClient(gym.Env):
         return self.loop.run_until_complete(self._reset_async())
 
     async def _reset_async(self) -> Tuple[Any, Dict[str, Any]]:
-        """Reset the environment asynchronously.
-        
+        """Asynchronously resets the environment.
+
         Returns:
-            A tuple of (observation, info).
+            Tuple[Any, Dict[str, Any]]: A tuple containing the initial
+            observation and an empty info dictionary.
         """
         if not self.connected:
             await self._connect()
@@ -163,13 +201,18 @@ class MCPClient(gym.Env):
         return observation, info
 
     def step(self, action: Any) -> Tuple[Any, float, bool, bool, Dict[str, Any]]:
-        """Take a step in the environment.
-        
+        """Takes a step in the remote environment.
+
+        This method sends a 'STEP' message with the given action to the server
+        and waits for the resulting state information.
+
         Args:
-            action: The action to take.
-            
+            action (Any): The action to take in the environment.
+
         Returns:
-            A tuple of (observation, reward, terminated, truncated, info).
+            Tuple[Any, float, bool, bool, Dict[str, Any]]: A tuple containing
+            the observation, reward, terminated flag, truncated flag, and info
+            dictionary.
         """
         if self.loop is None:
             self.loop = asyncio.get_event_loop()
@@ -178,13 +221,18 @@ class MCPClient(gym.Env):
         return self.loop.run_until_complete(self._step_async(action))
 
     async def _step_async(self, action: Any) -> Tuple[Any, float, bool, bool, Dict[str, Any]]:
-        """Take a step in the environment asynchronously.
-        
+        """Asynchronously takes a step in the environment.
+
         Args:
-            action: The action to take.
-            
+            action (Any): The action to take.
+
         Returns:
-            A tuple of (observation, reward, terminated, truncated, info).
+            Tuple[Any, float, bool, bool, Dict[str, Any]]: A tuple containing
+            the observation, reward, terminated flag, truncated flag, and info
+            dictionary.
+
+        Raises:
+            RuntimeError: If an error message is received from the server.
         """
         if not self.connected:
             await self._connect()
@@ -223,15 +271,18 @@ class MCPClient(gym.Env):
         return observation, reward, terminated, truncated, info
 
     def render(self) -> None:
-        """Render the environment."""
+        """Requests the server to render the environment.
+
+        This method sends a 'RENDER' message. No response is expected.
+        """
         if self.loop is None:
             self.loop = asyncio.get_event_loop()
             
         # Create a task to render the environment
-        return self.loop.run_until_complete(self._render_async())
+        self.loop.run_until_complete(self._render_async())
 
     async def _render_async(self) -> None:
-        """Render the environment asynchronously."""
+        """Asynchronously requests the server to render the environment."""
         if not self.connected:
             await self._connect()
             
@@ -242,22 +293,32 @@ class MCPClient(gym.Env):
         # No response expected for render
 
     def close(self) -> None:
-        """Close the environment."""
+        """Closes the connection to the server.
+
+        This method sends a 'CLOSE' message and terminates the WebSocket
+        connection.
+        """
+        if self.loop is None and not self.connected:
+            return
+
         if self.loop is None:
             self.loop = asyncio.get_event_loop()
             
         # Create a task to close the environment
-        return self.loop.run_until_complete(self._close_async())
+        self.loop.run_until_complete(self._close_async())
 
     async def _close_async(self) -> None:
-        """Close the environment asynchronously."""
+        """Asynchronously closes the connection to the server."""
         if not self.connected:
             return
             
         # Send close message
         close_msg = MCPCloseMessage()
-        await self.websocket.send(close_msg.to_json())
-        
-        # Close the websocket
-        await self.websocket.close()
-        self.connected = False
+        try:
+            await self.websocket.send(close_msg.to_json())
+        except websockets.exceptions.ConnectionClosed:
+            logger.warning("Connection already closed when sending close message.")
+        finally:
+            # Close the websocket
+            await self.websocket.close()
+            self.connected = False

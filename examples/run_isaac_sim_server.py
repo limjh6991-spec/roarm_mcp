@@ -1,40 +1,43 @@
 #!/usr/bin/env python3
-"""
-Script to run the RoArm MCP server with Isaac Sim integration.
+"""Script to run the RoArm MCP server with direct Isaac Sim integration.
 
-이 스크립트는 Isaac Sim 5.0 PhysX Tensors를 사용하는 MCP 서버를 시작합니다.
+This script is the primary entry point for launching the full simulation
+environment. It starts both the MCP server and the Isaac Sim application,
+managing the simulation life cycle via the `IsaacSimMCPHandler`.
+
+!!! IMPORTANT !!!
+This script MUST be run using the python executable provided with Isaac Sim,
+as it requires the Isaac Sim environment and libraries to be loaded.
+
+Usage (Linux):
+    /path/to/isaac_sim/python.sh examples/run_isaac_sim_server.py --robot-type <robot>
+
+Usage (Windows):
+    C:\\path\\to\\isaac_sim\\python.bat examples\\run_isaac_sim_server.py --robot-type <robot>
+
+Example:
+    # From the Isaac Sim root directory:
+    ./python.sh /path/to/roarm_mcp/examples/run_isaac_sim_server.py --robot-type ur10 --headless
 """
 
 import argparse
 import asyncio
 import logging
 import sys
-import os
 
-# Initialize logging first
-logging.basicConfig(level=logging.INFO)
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Add the project root to Python path
-project_root = '/home/roarm_m3/dev_roarm/roarm_mcp'
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-# Also add parent directory for relative imports
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
-
+# Attempt to import necessary modules. This will fail if not run with Isaac Sim's python.
 try:
-    from mcp.server import MCPServer
-    from mcp.isaac_sim_handler import IsaacSimMCPHandler
-except ImportError as e:
-    logger.error(f"Failed to import MCP modules: {e}")
-    logger.info(f"Current Python path: {sys.path}")
-    # Try alternative import
-    sys.path.append('/home/roarm_m3/dev_roarm')
     from roarm_mcp.mcp.server import MCPServer
     from roarm_mcp.mcp.isaac_sim_handler import IsaacSimMCPHandler
+except ImportError as e:
+    logger.error(f"Failed to import required modules: {e}")
+    logger.error("This script must be run with Isaac Sim's Python environment.")
+    logger.error("Example: /path/to/isaac_sim/python.sh examples/run_isaac_sim_server.py")
+    sys.exit(1)
 
 
 async def run_isaac_sim_server(
@@ -43,101 +46,70 @@ async def run_isaac_sim_server(
     robot_type: str,
     headless: bool
 ) -> None:
-    """Run the MCP server with Isaac Sim integration.
-    
+    """Initializes and runs the MCP server with a direct Isaac Sim handler.
+
     Args:
-        host: The host to bind to.
-        port: The port to bind to.
-        robot_type: The type of robot to use ("ur10" or "franka").
-        headless: Whether to run Isaac Sim in headless mode.
+        host (str): The hostname or IP address to bind the server to.
+        port (int): The port number for the server to listen on.
+        robot_type (str): The type of robot to load in the simulation ("ur10" or "franka").
+        headless (bool): If True, runs Isaac Sim without a graphical interface.
     """
-    logger.info("🤖 Isaac Sim MCP 서버 시작 중...")
+    logger.info("🤖 Starting Isaac Sim MCP Server...")
     
-    # Create server
+    # 1. Create the MCP Server instance
     server = MCPServer(host=host, port=port)
     
-    # Create Isaac Sim handler
+    # 2. Create the Isaac Sim handler, which will manage the sim application
     handler = IsaacSimMCPHandler(robot_type=robot_type, headless=headless)
     
-    # Register handler with server
+    # 3. Register the handler with the server
     server.register_env_handler(handler)
     
-    # Start server
+    # 4. Start the server
     await server.start()
-    logger.info(f"🚀 Isaac Sim MCP 서버 실행 중: {host}:{port}")
-    logger.info(f"📡 로봇 타입: {robot_type.upper()}")
-    logger.info(f"👀 헤드리스 모드: {'ON' if headless else 'OFF'}")
+    logger.info(f"🚀 Isaac Sim MCP Server is running at ws://{host}:{port}")
+    logger.info(f"📡 Robot Type: {robot_type.upper()}")
+    logger.info(f"👀 Headless Mode: {'ON' if headless else 'OFF'}")
     
     try:
-        # Keep the server running
+        # Keep the server running until interrupted
         while server.running:
             await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        logger.info("🛑 서버 종료 신호 수신...")
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        logger.info("🛑 Shutdown signal received.")
     finally:
-        # Cleanup
-        if handler.is_initialized:
+        # 5. Clean up resources gracefully
+        logger.info("Cleaning up resources...")
+        if handler.is_initialized():
             await handler.close()
         await server.stop()
-        logger.info("✅ Isaac Sim MCP 서버 종료 완료")
+        logger.info("✅ Isaac Sim MCP Server has been shut down.")
 
 
 def main():
-    """Main function to parse arguments and run the server."""
+    """Parses command-line arguments and starts the Isaac Sim MCP server."""
     parser = argparse.ArgumentParser(
-        description="Run RoArm MCP server with Isaac Sim integration"
+        description="Run the RoArm MCP server with direct Isaac Sim integration.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument(
-        "--host",
-        type=str,
-        default="localhost",
-        help="Host to bind the server to (default: localhost)"
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=8765,
-        help="Port to bind the server to (default: 8765)"
-    )
+    parser.add_argument("--host", type=str, default="localhost", help="Host to bind the server to.")
+    parser.add_argument("--port", type=int, default=8765, help="Port to bind the server to.")
     parser.add_argument(
         "--robot-type",
         type=str,
         choices=["ur10", "franka"],
         default="ur10",
-        help="Type of robot to use (default: ur10)"
+        help="Type of robot to load in the simulation."
     )
-    parser.add_argument(
-        "--headless",
-        action="store_true",
-        help="Run Isaac Sim in headless mode (default: False)"
-    )
-    parser.add_argument(
-        "--isaac-sim-path",
-        type=str,
-        default="/home/roarm_m3/isaac_sim",
-        help="Path to Isaac Sim installation (default: /home/roarm_m3/isaac_sim)"
-    )
-
+    parser.add_argument("--headless", action="store_true", help="Run Isaac Sim in headless mode.")
     args = parser.parse_args()
 
-    # Check Isaac Sim installation
-    if not os.path.exists(args.isaac_sim_path):
-        logger.error(f"❌ Isaac Sim이 경로에 없습니다: {args.isaac_sim_path}")
-        logger.error("Isaac Sim 설치 후 올바른 경로를 지정하세요.")
-        sys.exit(1)
+    logger.info("Starting server with configuration:")
+    logger.info(f"  Host: {args.host}")
+    logger.info(f"  Port: {args.port}")
+    logger.info(f"  Robot Type: {args.robot_type}")
+    logger.info(f"  Headless: {args.headless}")
 
-    # Add Isaac Sim Python path
-    isaac_python_path = os.path.join(args.isaac_sim_path, "python.sh")
-    if not os.path.exists(isaac_python_path):
-        logger.error(f"❌ Isaac Sim Python 실행파일이 없습니다: {isaac_python_path}")
-        logger.error("Isaac Sim python.sh를 사용하여 이 스크립트를 실행하세요:")
-        logger.error(f"cd {args.isaac_sim_path}")
-        logger.error(f"./python.sh /home/roarm_m3/dev_roarm/roarm_mcp/examples/run_isaac_sim_server.py")
-        sys.exit(1)
-
-    logger.info("✅ Isaac Sim 환경 확인 완료")
-
-    # Run the server
     try:
         asyncio.run(run_isaac_sim_server(
             host=args.host,
@@ -146,9 +118,7 @@ def main():
             headless=args.headless
         ))
     except Exception as e:
-        logger.error(f"❌ 서버 실행 중 오류 발생: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
+        logger.error(f"❌ A critical error occurred during server execution: {e}", exc_info=True)
         sys.exit(1)
 
 

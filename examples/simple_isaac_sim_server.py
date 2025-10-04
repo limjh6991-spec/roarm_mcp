@@ -1,91 +1,134 @@
 #!/usr/bin/env python3
-"""
-Simplified Isaac Sim MCP Server for testing.
-단순화된 Isaac Sim MCP 서버 테스트용
+"""A simplified mock MCP Server for basic client testing.
+
+!!! WARNING: This is a basic, non-functional mock server. !!!
+
+This script starts a simple WebSocket server that accepts connections but does
+not connect to an actual Isaac Sim environment or implement the true Model
+Context Protocol (MCP) logic. Its primary purpose is to act as a simple
+endpoint for testing client connectivity and message echoing.
+
+It will accept any JSON message and return a generic success response. It does
+not process actions or manage an environment state.
+
+For a fully functional server, please use `examples/run_server.py`.
 """
 
 import asyncio
 import websockets
 import json
 import logging
-import sys
-import os
+import argparse
 
-# Initialize logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Add project path
-project_root = '/home/roarm_m3/dev_roarm/roarm_mcp'
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
 
 class SimpleIsaacSimMCPServer:
+    """A simple, non-functional mock server to echo client messages.
+
+    This class manages client connections and responds to any incoming message
+    with a generic success status.
+
+    Attributes:
+        clients (set): A set of currently connected WebSocket clients.
+    """
     def __init__(self):
+        """Initializes the simple mock server."""
         self.clients = set()
-        self.isaac_sim_app = None
         
     async def register_client(self, websocket):
-        """클라이언트 등록"""
+        """Adds a new client to the set of connected clients.
+
+        Args:
+            websocket: The WebSocket connection object for the new client.
+        """
         self.clients.add(websocket)
-        logger.info(f"✅ 클라이언트 연결: {websocket.remote_address}")
+        logger.info(f"✅ Client connected: {websocket.remote_address} (Total: {len(self.clients)})")
         
     async def unregister_client(self, websocket):
-        """클라이언트 해제"""
+        """Removes a client from the set of connected clients.
+
+        Args:
+            websocket: The WebSocket connection object for the disconnected client.
+        """
         self.clients.discard(websocket)
-        logger.info(f"❌ 클라이언트 연결 해제: {websocket.remote_address}")
+        logger.info(f"❌ Client disconnected: {websocket.remote_address} (Total: {len(self.clients)})")
         
-    async def handle_message(self, websocket, message):
-        """메시지 처리"""
+    async def handle_message(self, websocket, message: str):
+        """Processes a message from a client by sending a mock response.
+
+        Args:
+            websocket: The WebSocket connection object of the sender.
+            message (str): The incoming message string from the client.
+        """
         try:
             data = json.loads(message)
-            logger.info(f"📨 수신 메시지: {data.get('action', 'unknown')}")
+            action = data.get('type', 'unknown_action')
+            logger.info(f"📨 Received message of type '{action}' from {websocket.remote_address}")
             
-            # 간단한 응답 생성
+            # Create a generic, mock response
             response = {
                 "status": "success",
-                "message": f"Received action: {data.get('action', 'unknown')}",
-                "data": {
-                    "robot_count": 2,
-                    "simulation_running": True
-                }
+                "message": f"Mock server received action: {action}",
+                "observation": [0.0, 0.0, 0.0], # Mock observation
+                "reward": 0.1, # Mock reward
+                "terminated": False,
+                "truncated": False,
+                "info": {"mock": True}
             }
             
             await websocket.send(json.dumps(response))
-            logger.info(f"📤 응답 전송 완료")
+            logger.info(f"📤 Sent mock response to {websocket.remote_address}")
             
         except json.JSONDecodeError:
-            error_response = {"status": "error", "message": "Invalid JSON"}
+            error_response = {"status": "error", "message": "Invalid JSON received."}
             await websocket.send(json.dumps(error_response))
             
-    async def handle_client(self, websocket, path):
-        """클라이언트 핸들러"""
+    async def client_handler(self, websocket, path: str):
+        """Manages the lifecycle of a single client connection.
+
+        Args:
+            websocket: The WebSocket connection object.
+            path (str): The requested connection path.
+        """
         await self.register_client(websocket)
         try:
             async for message in websocket:
                 await self.handle_message(websocket, message)
         except websockets.exceptions.ConnectionClosed:
-            logger.info("클라이언트 연결이 정상적으로 종료되었습니다")
+            logger.info(f"Connection with {websocket.remote_address} closed normally.")
         except Exception as e:
-            logger.error(f"클라이언트 처리 오류: {e}")
+            logger.error(f"An error occurred with client {websocket.remote_address}: {e}")
         finally:
             await self.unregister_client(websocket)
             
-    async def start_server(self, host="localhost", port=8765):
-        """서버 시작"""
-        logger.info(f"🚀 간단한 MCP 서버 시작: {host}:{port}")
+    async def start(self, host: str, port: int):
+        """Starts the WebSocket server and runs it indefinitely.
+
+        Args:
+            host (str): The hostname or IP address to bind to.
+            port (int): The port number to listen on.
+        """
+        logger.info(f"🚀 Starting simple mock MCP server on ws://{host}:{port}")
         
-        async with websockets.serve(self.handle_client, host, port):
-            logger.info(f"📡 WebSocket 서버 대기 중...")
-            await asyncio.Future()  # run forever
+        async with websockets.serve(self.client_handler, host, port):
+            logger.info("📡 Mock server is running. Press Ctrl+C to stop.")
+            await asyncio.Future()  # Run forever
 
 async def main():
-    """메인 함수"""
+    """Parses arguments and starts the server."""
+    parser = argparse.ArgumentParser(description="Run a simple mock MCP server.")
+    parser.add_argument("--host", type=str, default="localhost", help="Host to bind to.")
+    parser.add_argument("--port", type=int, default=8765, help="Port to bind to.")
+    args = parser.parse_args()
+
     server = SimpleIsaacSimMCPServer()
     try:
-        await server.start_server()
+        await server.start(args.host, args.port)
     except KeyboardInterrupt:
-        logger.info("⚡ 서버 종료")
+        logger.info("⚡ Server shutting down.")
 
 if __name__ == "__main__":
     asyncio.run(main())
