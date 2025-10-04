@@ -11,7 +11,7 @@ import websockets
 from typing import Any, Dict, Optional, Callable, Awaitable, List, Tuple, Union
 import traceback
 
-from roarm_mcp.mcp.protocol import (
+from mcp.protocol import (
     MCPMessage, MCPResetMessage, MCPStepMessage, MCPRenderMessage, MCPCloseMessage,
     MCPActionSpaceMessage, MCPObservationSpaceMessage, MCPObservationMessage,
     MCPRewardMessage, MCPTerminatedMessage, MCPTruncatedMessage, MCPInfoMessage,
